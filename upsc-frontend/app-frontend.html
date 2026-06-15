@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UPSC AI — App (HTML frontend)</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<style>
+  :root{
+    --bg:#fbfaf8; --surface:#ffffff; --surface-2:#f4f2ee;
+    --ink:#15171c; --muted:#5c6573; --line:#ebe6dd;
+    --brand:#4338ca; --brand-2:#6d28d9; --accent:#f59e0b;
+    --glow:rgba(99,90,230,.18); --shadow:rgba(20,20,30,.08); --maxw:1080px;
+    --ok:#16a34a; --bad:#dc2626;
+  }
+  html[data-theme="dark"]{
+    --bg:#0a0d16; --surface:#121726; --surface-2:#171d2e;
+    --ink:#eef1f7; --muted:#97a1b2; --line:#222a3c;
+    --brand:#818cf8; --brand-2:#a78bfa; --accent:#fbbf24;
+    --glow:rgba(129,140,248,.22); --shadow:rgba(0,0,0,.5);
+    --ok:#4ade80; --bad:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased;transition:background .3s,color .3s}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  a{color:var(--brand)}
+  .grad{background:linear-gradient(100deg,var(--brand),var(--brand-2) 55%,var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hidden{display:none !important}
+
+  /* NAV */
+  header{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;height:56px}
+  .navtabs{padding-bottom:10px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em;flex:0 0 auto;cursor:pointer}
+  .brand .mark{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:15px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 4px 14px var(--glow)}
+  .tabs{display:flex;gap:3px;flex:1;justify-content:center;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{white-space:nowrap;padding:7px 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid transparent;background:none}
+  .tab:hover{background:var(--surface-2);color:var(--ink)}
+  .tab.active{background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;box-shadow:0 4px 14px var(--glow)}
+  .nav-right{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .icobtn{width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--surface);cursor:pointer;display:grid;place-items:center;font-size:14px;transition:border-color .2s,transform .2s;color:var(--ink)}
+  .icobtn:hover{border-color:var(--brand);transform:translateY(-1px)}
+
+  main{padding:26px 0 80px}
+  h1.page{font-size:26px;letter-spacing:-.02em;margin-bottom:4px}
+  .lead{color:var(--muted);margin-bottom:20px;font-size:15px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 1px 0 var(--shadow)}
+  .card + .card{margin-top:16px}
+  label{display:block;font-size:13px;font-weight:600;margin:10px 0 5px}
+  input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:14px;font-family:inherit}
+  textarea{resize:vertical;min-height:90px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row > *{flex:1;min-width:140px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:transform .15s,box-shadow .2s,border-color .2s}
+  .btn:hover{transform:translateY(-1px);border-color:var(--brand)}
+  .btn.brand{background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;border-color:transparent;box-shadow:0 6px 20px var(--glow)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .out{margin-top:16px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--bg);min-height:40px}
+  .out h1,.out h2,.out h3{margin:.6em 0 .3em;line-height:1.25}
+  .out p,.out li{font-size:14.5px}
+  .out ul,.out ol{padding-left:20px}
+  .out blockquote{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);background:var(--surface-2);border-radius:6px}
+  .out code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:13px}
+  .out table{border-collapse:collapse;width:100%;margin:10px 0}
+  .out th,.out td{border:1px solid var(--line);padding:6px 9px;font-size:13.5px;text-align:left}
+  .muted{color:var(--muted)}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+  .err{color:var(--bad);font-size:13px;margin-top:8px}
+  .ok{color:var(--ok);font-size:13px;margin-top:8px}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* SPLASH */
+  #splash{position:fixed;inset:0;z-index:999;display:grid;place-items:center;background:var(--bg);transition:opacity .55s ease,visibility .55s ease}
+  #splash.gone{opacity:0;visibility:hidden}
+  .splash-in{display:flex;flex-direction:column;align-items:center;gap:16px;animation:splashPop .7s cubic-bezier(.2,.8,.2,1)}
+  .splash-mark{width:76px;height:76px;border-radius:20px;display:grid;place-items:center;color:#fff;font-size:34px;font-weight:800;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 14px 40px var(--glow);animation:splashFloat 2s ease-in-out infinite}
+  .splash-name{font-size:27px;font-weight:800;letter-spacing:-.02em}
+  .splash-tag{font-size:13px;color:var(--muted);margin-top:-6px}
+  .splash-bar{width:130px;height:4px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+  .splash-bar i{display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,var(--brand),var(--accent));animation:splashLoad 1.3s ease-in-out infinite}
+  @keyframes splashPop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+  @keyframes splashFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  @keyframes splashLoad{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
+  iframe.embed{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;min-height:360px;margin-top:12px}
+
+  /* CHAT */
+  .chat{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+  .msg{padding:12px 14px;border-radius:12px;max-width:88%}
+  .msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line)}
+  .msg.bot p:first-child{margin-top:0}.msg.bot p:last-child{margin-bottom:0}
+  .chat-input{display:flex;gap:8px;margin-top:14px}
+  .chat-input input{flex:1}
+
+  /* AUTH */
+  .auth-screen{min-height:88vh;display:grid;place-items:center}
+  .auth-card{width:100%;max-width:420px}
+  .logo-big{width:60px;height:60px;border-radius:16px;margin:0 auto 14px;display:grid;place-items:center;color:#fff;font-size:28px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 8px 28px var(--glow)}
+  .auth-tabs{display:flex;gap:6px;margin-bottom:16px}
+  .auth-tabs .tab{flex:1;text-align:center;border:1px solid var(--line)}
+  .center{text-align:center}
+
+  /* WELCOME */
+  .welcome{text-align:center;padding:16px 0 10px}
+  .hi{font-size:clamp(28px,5vw,42px);font-weight:800;letter-spacing:-.02em}
+  .wave{display:inline-block;animation:wave 2s ease-in-out infinite;transform-origin:70% 70%}
+  @keyframes wave{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-8deg)}30%{transform:rotate(16deg)}40%{transform:rotate(-4deg)}50%{transform:rotate(12deg)}}
+  .quick{margin-top:26px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
+  @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid{grid-template-columns:1fr}}
+  .tool-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;text-align:left;transition:transform .15s,box-shadow .2s,border-color .2s}
+  .tool-card:hover{transform:translateY(-3px);box-shadow:0 12px 30px var(--shadow);border-color:var(--brand)}
+  .tool-card .ic{font-size:22px}
+  .tool-card h3{font-size:15px;margin:8px 0 3px}
+  .tool-card p{font-size:12.5px;color:var(--muted);line-height:1.45}
+  .subtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .subtab{padding:7px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+  .subtab.active{background:var(--brand);color:#fff;border-color:transparent}
+  .qopt{display:block;width:100%;text-align:left;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);margin:7px 0;cursor:pointer;font-size:14px;color:var(--ink)}
+  .qopt:hover{border-color:var(--brand)}
+  .qopt.correct{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  .qopt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+  .qopt.disabled{cursor:default;pointer-events:none}
+  .barbox{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<!-- ============ SPLASH ============ -->
+<div id="splash">
+  <div class="splash-in">
+    <div class="splash-mark">U</div>
+    <div class="splash-name">UPSC<span class="grad">AI</span></div>
+    <div class="splash-tag">Your honest AI study partner</div>
+    <div class="splash-bar"><i></i></div>
+  </div>
+</div>
+
+<!-- ============ APP HEADER (authed) ============ -->
+<header id="appHeader" class="hidden">
+  <div class="wrap nav">
+    <span class="brand" data-go="home"><span class="mark">U</span>UPSC&nbsp;AI</span>
+    <div class="nav-right">
+      <button class="icobtn" id="historyBtn" title="History">🕒</button>
+      <button class="icobtn" id="settingsBtn" title="Backend settings">⚙️</button>
+      <button class="icobtn" id="themeBtn" title="Toggle theme">🌙</button>
+      <button class="icobtn" id="logoutBtn" title="Logout">🚪</button>
+    </div>
+  </div>
+  <div class="wrap navtabs">
+    <div class="tabs" id="tabs"></div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap" id="view"></div>
+</main>
+
+<script>
+/* ============================================================
+   CONFIG + API LAYER  (all endpoints match src/api routes)
+   ============================================================ */
+const DEFAULT_API = "https://upsc-ai-pro.onrender.com/api/v1";
+function apiBase(){ return localStorage.getItem("upscai-api") || DEFAULT_API; }
+function setApiBase(v){ localStorage.setItem("upscai-api", v.replace(/\/$/,"")); }
+function token(){ return localStorage.getItem("upscai-token") || ""; }
+function authHeaders(){ const t=token(); return t?{"Authorization":"Bearer "+t}:{}; }
+function apiUrl(path, params){
+  let u = apiBase()+path;
+  if(params){ const q=new URLSearchParams(params).toString(); if(q) u+="?"+q; }
+  return u;
+}
+function decodeJwt(t){
+  try{ const p=t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    return JSON.parse(decodeURIComponent(escape(atob(p)))); }catch(e){ return {}; }
+}
+function currentUser(){ return decodeJwt(token()); }
+function extractVideoId(url){ if(!url) return ""; const m=url.match(/(?:v=|\/embed\/|youtu\.be\/|\/shorts\/|\/v\/)([A-Za-z0-9_-]{11})/); return m?m[1]:(/^[A-Za-z0-9_-]{11}$/.test(url.trim())?url.trim():""); }
+
+async function jget(path, params){
+  const r = await fetch(apiUrl(path,params), {headers:authHeaders()});
+  if(!r.ok) throw new Error("GET "+path+" -> "+r.status);
+  return r.json();
+}
+async function jpost(path, body, params){
+  const r = await fetch(apiUrl(path,params), {method:"POST",
+    headers:{...authHeaders(),"Content-Type":"application/json"},
+    body: body!==undefined?JSON.stringify(body):undefined});
+  if(!r.ok){ let d=""; try{ d=(await r.json()).detail; }catch(e){} throw new Error(d||("POST "+path+" -> "+r.status)); }
+  return r.json();
+}
+async function jpostForm(path, fields){
+  const body=new URLSearchParams(); Object.entries(fields).forEach(([k,v])=>body.set(k,v));
+  const r = await fetch(apiUrl(path), {method:"POST", body});
+  return r;
+}
+async function jpostFile(path, file){
+  const fd=new FormData(); fd.append("file", file, file.name);
+  const r = await fetch(apiUrl(path), {method:"POST", headers:authHeaders(), body:fd});
+  if(!r.ok){ let d=""; try{ d=(await r.json()).detail; }catch(e){} throw new Error(d||("upload -> "+r.status)); }
+  return r.json();
+}
+/* Streaming POST -> calls onChunk(textPiece) as data arrives */
+async function streamPost(path, body, onChunk, params){
+  let res;
+  try{
+    res = await fetch(apiUrl(path,params), {method:"POST",
+      headers:{...authHeaders(),"Content-Type":"application/json"},
+      body: JSON.stringify(body)});
+  }catch(e){ onChunk("\n\n⚠️ Backend connection error: "+e.message+"\n(Is the FastAPI server running on "+apiBase()+"?)"); return; }
+  if(!res.ok){ if(res.status===401){ onChunk("\n\n⚠️ Session expired. Please log out and log in again."); }
+    else { let d=""; try{ d=(await res.json()).detail; }catch(e){} onChunk("\n\n⚠️ Error "+res.status+": "+(d||"")); } return; }
+  const reader=res.body.getReader(); const dec=new TextDecoder("utf-8");
+  while(true){ const {done,value}=await reader.read(); if(done) break;
+    const piece=dec.decode(value,{stream:true}); if(piece) onChunk(piece); }
+}
+
+/* ============================================================
+   MARKDOWN + DOM HELPERS
+   ============================================================ */
+function md(s){
+  s=s||"";
+  if(window.marked&&window.DOMPurify){ try{ return DOMPurify.sanitize(marked.parse(s)); }catch(e){} }
+  return "<pre style='white-space:pre-wrap'>"+escapeHtml(s)+"</pre>";
+}
+function escapeHtml(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function el(html){ const d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstElementChild; }
+function $(sel,root){ return (root||document).querySelector(sel); }
+function view(){ return document.getElementById("view"); }
+function setView(html){ view().innerHTML=html; }
+
+/* ============================================================
+   THEME
+   ============================================================ */
+(function initTheme(){
+  const root=document.documentElement;
+  let saved=null; try{ saved=localStorage.getItem("upscai-theme"); }catch(e){}
+  const sysDark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+  apply(saved||(sysDark?"dark":"light"));
+  function apply(t){ root.setAttribute("data-theme",t); const b=document.getElementById("themeBtn"); if(b)b.textContent=t==="dark"?"☀️":"🌙"; }
+  window._applyTheme=apply;
+})();
+document.getElementById("themeBtn").addEventListener("click",function(){
+  const root=document.documentElement; const n=root.getAttribute("data-theme")==="dark"?"light":"dark";
+  window._applyTheme(n); try{ localStorage.setItem("upscai-theme",n); }catch(e){}
+});
+document.getElementById("settingsBtn").addEventListener("click",function(){
+  const cur=apiBase(); const v=prompt("FastAPI backend base URL:", cur);
+  if(v){ setApiBase(v); alert("Saved: "+apiBase()); }
+});
+document.getElementById("logoutBtn").addEventListener("click",function(){
+  localStorage.removeItem("upscai-token"); render();
+});
+document.getElementById("historyBtn").addEventListener("click",()=>go("history"));
+document.querySelector(".brand").addEventListener("click",()=>go("home"));
+
+/* ============================================================
+   TABS / ROUTER
+   ============================================================ */
+const TOOLS=[
+  {id:"home",label:"🏠 Home"},{id:"mentor",label:"🧠 Mentor"},{id:"planner",label:"📝 Planner"},
+  {id:"ncert",label:"📚 NCERT"},{id:"lecture",label:"🎥 Lecture"},{id:"ca",label:"📰 Current Affairs"},
+  {id:"pdfs",label:"📄 My PDFs"},{id:"pyq",label:"📝 PYQ"},{id:"evaluator",label:"✍️ Evaluator"}
+];
+let activeTab="home";
+function buildTabs(){
+  const t=document.getElementById("tabs"); t.innerHTML="";
+  TOOLS.forEach(x=>{ const b=el(`<span class="tab" data-id="${x.id}">${x.label}</span>`);
+    b.addEventListener("click",()=>go(x.id)); t.appendChild(b); });
+}
+function go(id){ activeTab=id; document.querySelectorAll("#tabs .tab").forEach(b=>b.classList.toggle("active",b.dataset.id===id)); renderTool(id); window.scrollTo(0,0); }
+
+/* ============================================================
+   TOP-LEVEL RENDER
+   ============================================================ */
+function render(){
+  if(!token()){ renderAuth(); document.getElementById("appHeader").classList.add("hidden"); return; }
+  document.getElementById("appHeader").classList.remove("hidden");
+  buildTabs(); go("home");
+}
+
+/* ---------------- AUTH ---------------- */
+function renderAuth(){
+  setView(`
+  <div class="auth-screen"><div class="auth-card card">
+    <div class="logo-big" id="authLogo" style="cursor:pointer" title="Back to landing page">🧠</div>
+    <div class="center" style="font-size:24px;font-weight:800;letter-spacing:-.5px">UPSC<span class="grad">AI</span></div>
+    <div class="center muted" style="font-size:13px;margin:4px 0 18px">Sign in or create your account</div>
+    <div class="auth-tabs">
+      <span class="tab active" id="tLogin">🔓 Sign In</span>
+      <span class="tab" id="tReg">✨ Create Account</span>
+    </div>
+    <div id="loginBox">
+      <label>Email</label><input id="liEmail" placeholder="you@example.com"/>
+      <label>Password</label><input id="liPw" type="password" placeholder="••••••••"/>
+      <div style="height:12px"></div>
+      <button class="btn brand" id="liBtn" style="width:100%">🔓 Sign In</button>
+      <div id="liMsg"></div>
+      <details style="margin-top:12px"><summary class="muted" style="cursor:pointer;font-size:13px">Forgot your password?</summary>
+        <label>Account email</label><input id="fpEmail" placeholder="you@example.com"/>
+        <div style="height:8px"></div>
+        <button class="btn sm" id="fpBtn">Send reset link</button><div id="fpMsg"></div>
+      </details>
+    </div>
+    <div id="regBox" class="hidden">
+      <label>Name</label><input id="rName" placeholder="Your name"/>
+      <label>Email</label><input id="rEmail" placeholder="you@example.com"/>
+      <label>Password</label><input id="rPw" type="password" placeholder="At least 6 characters"/>
+      <label>Confirm Password</label><input id="rPw2" type="password" placeholder="Re-enter password"/>
+      <div style="height:12px"></div>
+      <button class="btn brand" id="rBtn" style="width:100%">✨ Create Account</button>
+      <div id="rMsg"></div>
+    </div>
+    <div class="center muted" style="font-size:11.5px;margin-top:16px">Backend: ${escapeHtml(apiBase())} &nbsp;·&nbsp; <span id="cfgLink" style="cursor:pointer;text-decoration:underline">change</span></div>
+  </div></div>`);
+  $("#cfgLink").addEventListener("click",()=>{ const v=prompt("FastAPI backend base URL:",apiBase()); if(v){setApiBase(v); renderAuth();} });
+  $("#authLogo").addEventListener("click",()=>{ window.location.href="landing.html"; });
+  $("#tLogin").addEventListener("click",()=>{ $("#tLogin").classList.add("active"); $("#tReg").classList.remove("active"); $("#loginBox").classList.remove("hidden"); $("#regBox").classList.add("hidden"); });
+  $("#tReg").addEventListener("click",()=>{ $("#tReg").classList.add("active"); $("#tLogin").classList.remove("active"); $("#regBox").classList.remove("hidden"); $("#loginBox").classList.add("hidden"); });
+  $("#liBtn").addEventListener("click", doLogin);
+  $("#liPw").addEventListener("keydown",e=>{ if(e.key==="Enter") doLogin(); });
+  $("#rBtn").addEventListener("click", doRegister);
+  $("#fpBtn").addEventListener("click", doForgot);
+}
+async function doLogin(){
+  const email=$("#liEmail").value.trim(), pw=$("#liPw").value, m=$("#liMsg");
+  if(!email||!pw){ m.innerHTML=`<div class="err">Please enter email and password.</div>`; return; }
+  m.innerHTML=`<div class="muted" style="margin-top:8px"><span class="spin"></span> Signing in…</div>`;
+  try{
+    const r=await jpostForm("/auth/login",{username:email,password:pw});
+    if(r.status===200){ const d=await r.json(); localStorage.setItem("upscai-token",d.access_token||""); render(); return; }
+    if(r.status===401){ m.innerHTML=`<div class="err">❌ Incorrect email or password.</div>`; }
+    else if(r.status===403){ let detail=""; try{ detail=(await r.json()).detail; }catch(e){} m.innerHTML=`<div class="err">📧 ${escapeHtml(detail||"Email not verified. Check your inbox for the link.")}</div><div style="margin-top:8px"><span id="liResend" style="cursor:pointer;text-decoration:underline;color:#4361ee">✉️ Resend verification email</span></div><div id="liResendMsg"></div>`; const rb=$("#liResend"); if(rb) rb.addEventListener("click",()=>doResend(email,$("#liResendMsg"))); }
+    else if(r.status===429){ m.innerHTML=`<div class="err">⏳ Too many attempts. Try again shortly.</div>`; }
+    else { m.innerHTML=`<div class="err">⚠️ Login failed (status ${r.status}).</div>`; }
+  }catch(e){ m.innerHTML=`<div class="err">⚠️ Couldn't connect to the server. Is the backend running at ${escapeHtml(apiBase())}?</div>`; }
+}
+async function doRegister(){
+  const name=$("#rName").value.trim(), email=$("#rEmail").value.trim(), pw=$("#rPw").value, pw2=$("#rPw2").value, m=$("#rMsg");
+  if(!email||!pw){ m.innerHTML=`<div class="err">Email and password are required.</div>`; return; }
+  if(pw.length<6){ m.innerHTML=`<div class="err">Password must be at least 6 characters.</div>`; return; }
+  if(pw!==pw2){ m.innerHTML=`<div class="err">Passwords do not match.</div>`; return; }
+  m.innerHTML=`<div class="muted" style="margin-top:8px"><span class="spin"></span> Creating account…</div>`;
+  try{
+    const r=await fetch(apiUrl("/auth/register"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pw,name})});
+    if(r.status===200||r.status===201){ const d=await r.json(); if(d && d.verification_required){ renderVerifyPending(d.email||email); return; } if(d && d.access_token){ localStorage.setItem("upscai-token",d.access_token); render(); return; } renderVerifyPending(email); return; }
+    let detail=""; try{ detail=(await r.json()).detail; }catch(e){}
+    m.innerHTML=`<div class="err">❌ ${escapeHtml(detail||("Register failed (status "+r.status+")."))}</div>`;
+  }catch(e){ m.innerHTML=`<div class="err">⚠️ Couldn't connect to the server.</div>`; }
+}
+async function doForgot(){
+  const email=$("#fpEmail").value.trim(), m=$("#fpMsg");
+  if(!email){ m.innerHTML=`<div class="err">Please enter your account email.</div>`; return; }
+  try{ const d=await jpost("/auth/forgot-password",{email}); m.innerHTML=`<div class="ok">${escapeHtml(d.message||"If an account exists, a reset link has been sent.")}</div>`; }
+  catch(e){ m.innerHTML=`<div class="err">⚠️ Something went wrong.</div>`; }
+}
+
+/* ---------------- PASSWORD RESET (via email link ?reset_token=...) ---------------- */
+function getResetToken(){
+  try{ return new URL(window.location.href).searchParams.get("reset_token")||""; }
+  catch(e){ return ""; }
+}
+function clearResetTokenFromUrl(){
+  try{ const u=new URL(window.location.href); u.searchParams.delete("reset_token");
+    window.history.replaceState({}, document.title, u.pathname + (u.search||"") + (u.hash||"")); }
+  catch(e){}
+}
+function renderResetPassword(rtok){
+  const h=document.getElementById("appHeader"); if(h) h.classList.add("hidden");
+  setView(`
+  <div class="auth-screen"><div class="auth-card card">
+    <div class="logo-big">🔑</div>
+    <div class="center" style="font-size:24px;font-weight:800;letter-spacing:-.5px">Reset Password</div>
+    <div class="center muted" style="font-size:13px;margin:4px 0 18px">Choose a new password for your account</div>
+    <label>New Password</label><input id="rpPw" type="password" placeholder="At least 6 characters"/>
+    <label>Confirm New Password</label><input id="rpPw2" type="password" placeholder="Re-enter new password"/>
+    <div style="height:12px"></div>
+    <button class="btn brand" id="rpBtn" style="width:100%">🔑 Update Password</button>
+    <div id="rpMsg"></div>
+    <div class="center muted" style="font-size:12px;margin-top:14px"><span id="rpBack" style="cursor:pointer;text-decoration:underline">← Back to Sign In</span></div>
+  </div></div>`);
+  $("#rpBtn").addEventListener("click",()=>doReset(rtok));
+  $("#rpPw2").addEventListener("keydown",e=>{ if(e.key==="Enter") doReset(rtok); });
+  $("#rpBack").addEventListener("click",()=>{ clearResetTokenFromUrl(); render(); });
+}
+async function doReset(rtok){
+  const pw=$("#rpPw").value, pw2=$("#rpPw2").value, m=$("#rpMsg");
+  if(!pw||pw.length<6){ m.innerHTML=`<div class="err">Password must be at least 6 characters.</div>`; return; }
+  if(pw!==pw2){ m.innerHTML=`<div class="err">Passwords do not match.</div>`; return; }
+  m.innerHTML=`<div class="muted" style="margin-top:8px"><span class="spin"></span> Updating password…</div>`;
+  try{
+    const r=await fetch(apiUrl("/auth/reset-password"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:rtok,new_password:pw})});
+    if(r.status===200){ let msg=""; try{ msg=(await r.json()).message; }catch(e){}
+      clearResetTokenFromUrl();
+      setView(`<div class="auth-screen"><div class="auth-card card"><div class="logo-big">✅</div><div class="center" style="font-size:20px;font-weight:800">Password Updated</div><div class="center muted" style="font-size:13px;margin:10px 0 18px">${escapeHtml(msg||"You can now sign in with your new password.")}</div><button class="btn brand" id="rpGo" style="width:100%">🔓 Go to Sign In</button></div></div>`);
+      $("#rpGo").addEventListener("click",()=>render());
+      return;
+    }
+    let detail=""; try{ detail=(await r.json()).detail; }catch(e){}
+    m.innerHTML=`<div class="err">❌ ${escapeHtml(detail||("Reset failed (status "+r.status+")."))}</div>`;
+  }catch(e){ m.innerHTML=`<div class="err">⚠️ Couldn’t connect to the server. Is the backend running at ${escapeHtml(apiBase())}?</div>`; }
+}
+
+/* ============================================================
+   REUSABLE: streaming output + chat
+   ============================================================ */
+function streamInto(box, path, body, params, onDone){
+  box.innerHTML=`<div class="muted"><span class="spin"></span> Generating… <span class="muted" style="font-size:12px">(AI speed depends on the model, not the UI)</span></div>`;
+  let buf=""; let first=true;
+  streamPost(path, body, (chunk)=>{ if(first){ buf=""; first=false; } buf+=chunk; box.innerHTML=md(buf); }, params)
+    .then(()=>{ if(!buf.trim()) box.innerHTML=`<span class="muted">No response.</span>`; if(onDone)onDone(buf); });
+}
+/* ---- History saving (POST /history/messages) + feedback (POST /feedback/submit) ---- */
+const CONV_IDS={};
+async function saveExchange(agent,q,ans){
+  try{
+    const t=(q||"").slice(0,50);
+    const r1=await jpost("/history/messages",{role:"user",content:q,agent,conversation_id:CONV_IDS[agent]||undefined,title:t});
+    if(r1&&r1.conversation_id) CONV_IDS[agent]=r1.conversation_id;
+    await jpost("/history/messages",{role:"assistant",content:ans,agent,conversation_id:CONV_IDS[agent]||undefined,title:t});
+  }catch(e){}
+}
+function addFeedback(botEl,agent,q,ans){
+  const bar=el(`<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm" title="Helpful">👍</button><button class="btn sm" title="Needs work">👎</button></div>`);
+  const ups=bar.children[0], dns=bar.children[1];
+  function send(rating){ ups.disabled=true; dns.disabled=true; bar.innerHTML='<span class="muted" style="font-size:12px">'+(rating==="up"?"👍 Thanks for the feedback!":"👎 Thanks — we will improve.")+'</span>'; jpost("/feedback/submit",{rating,agent,question:q,answer:ans,comment:""}).catch(e=>{}); }
+  ups.addEventListener("click",()=>send("up")); dns.addEventListener("click",()=>send("down"));
+  botEl.appendChild(bar);
+}
+/* Generic chat: sendFn(question, historyArr) -> {path, body, params} */
+function mountChat(container, agent, buildReq, opts){
+  opts=opts||{};
+  const history=[];
+  container.innerHTML=`<div class="chat" id="chat_${agent}"></div>
+    <div class="chat-input"><input id="ci_${agent}" placeholder="${opts.placeholder||"Ask a question…"}"/><button class="btn brand" id="cs_${agent}">Send</button></div>`;
+  const chat=$("#chat_"+agent,container), input=$("#ci_"+agent,container), send=$("#cs_"+agent,container);
+  if(opts.intro){ chat.appendChild(el(`<div class="msg bot">${md(opts.intro)}</div>`)); }
+  async function doSend(){
+    const q=input.value.trim(); if(!q) return; input.value="";
+    chat.appendChild(el(`<div class="msg user">${escapeHtml(q)}</div>`));
+    const bot=el(`<div class="msg bot"><span class="spin"></span></div>`); chat.appendChild(bot); bot.scrollIntoView({behavior:"smooth"});
+    const req=buildReq(q, history.slice());
+    let buf="",first=true;
+    await streamPost(req.path, req.body, (c)=>{ if(first){buf="";first=false;} buf+=c; bot.innerHTML=md(buf); chat.scrollTop=chat.scrollHeight; }, req.params);
+    history.push({role:"user",content:q}); history.push({role:"assistant",content:buf});
+    if(opts.save){ saveExchange(opts.save, q, buf); }
+    if(opts.feedback){ addFeedback(bot, opts.save||agent, q, buf); }
+  }
+  send.addEventListener("click",doSend);
+  input.addEventListener("keydown",e=>{ if(e.key==="Enter") doSend(); });
+}
+
+/* ============================================================
+   PER-TOOL RENDER
+   ============================================================ */
+function renderTool(id){
+  ({home:rHome,mentor:rMentor,planner:rPlanner,ncert:rNcert,lecture:rLecture,
+    ca:rCA,pdfs:rUpload,pyq:rPYQ,evaluator:rEval,history:rHistory}[id]||rHome)();
+}
+
+/* ---- HOME ---- */
+function rHome(){
+  const u=currentUser(); const name=u.name||(u.email?u.email.split("@")[0]:"there");
+  setView(`
+  <section class="welcome">
+    <span class="pill">Your dashboard</span>
+    <div class="hi" style="margin-top:14px">Welcome back, <span class="grad">${escapeHtml(name)}</span> <span class="wave">👋</span></div>
+    <p class="lead" style="margin-top:10px">Where would you like to start today? Pick any tool below — or use the nav bar above.</p>
+    <div class="quick">
+      <button class="btn brand" data-go="history">🕒 History</button>
+      <button class="btn" data-go="mentor">🧠 Ask Mentor</button>
+      <button class="btn" data-go="planner">📝 Make Study Plan</button>
+      <button class="btn" data-go="ncert">📚 Study NCERT</button>
+    </div>
+  </section>
+  <div class="grid">
+    ${[["mentor","🧠","AI Mentor","Strategy, doubt-clearing and your full roadmap."],
+       ["planner","📝","Planner","A study plan around your year, hours and weak areas."],
+       ["ncert","📚","NCERT Study","Chapter notes and a grounded RAG chat."],
+       ["lecture","🎥","Lecture AI","YouTube lecture into notes + Q&A."],
+       ["ca","📰","Current Affairs","Daily news, editorials and monthly digests."],
+       ["pdfs","📄","My PDFs","Upload a book/notes, get notes and chat."],
+       ["pyq","📝","PYQ Practice","Prelims MCQs and Mains practice."],
+       ["evaluator","✍️","Evaluator","Write answers, get scoring and a model answer."]]
+      .map(c=>`<div class="tool-card" data-go="${c[0]}"><div class="ic">${c[1]}</div><h3>${c[2]}</h3><p>${c[3]}</p></div>`).join("")}
+  </div>`);
+  view().querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
+}
+
+/* ---- MENTOR ---- */
+function rMentor(){
+  setView(`<h1 class="page">🧠 AI Mentor</h1><p class="lead">Strategy, doubt-clearing and roadmap. Volatile facts (dates/cut-offs) are grounded or flagged to verify at upsc.gov.in.</p><div class="card" id="mc"></div>`);
+  mountChat($("#mc"), "mentor",
+    (q,hist)=>({path:"/mentor/chat", body:{question:q, chat_history:hist}}),
+    {placeholder:"e.g. How do I start GS Polity from zero?", intro:"Hi, I'm your UPSC mentor. What would you like help with today?", save:"mentor", feedback:true});
+}
+
+/* ---- PLANNER ---- */
+const OPTIONAL_SUBJECTS=["Not decided yet","History","Geography","Political Science & International Relations","Sociology","Philosophy","Psychology","Public Administration","Economics","Anthropology","Hindi Literature","English Literature","Urdu Literature","Sanskrit Literature","Tamil Literature","Telugu Literature","Kannada Literature","Malayalam Literature","Bengali Literature","Marathi Literature","Gujarati Literature","Odia Literature","Punjabi Literature","Assamese Literature","Maithili Literature","Mathematics","Statistics","Physics","Chemistry","Botany","Zoology","Agriculture","Animal Husbandry & Veterinary Science","Geology","Mechanical Engineering","Electrical Engineering","Civil Engineering","Medical Science","Commerce & Accountancy","Management","Law","Other"];
+const GS_WEAK_AREAS=["Not specified","Ancient Indian History","Medieval Indian History","Modern Indian History","Post-Independence India","World History","Indian Art & Culture","Indian & World Geography (Physical)","Indian & World Geography (Human & Economic)","Indian Society & Social Issues","Indian Polity & Constitution","Governance & Public Policy","Social Justice","International Relations","Indian Economy","Agriculture & Food Security","Science & Technology","Environment & Ecology","Disaster Management","Internal Security","Ethics & Integrity","Case Studies (Ethics Paper)","Current Affairs","CSAT (Paper 2)","Environment & Biodiversity (Prelims)","Economy (Prelims MCQs)","Answer Writing (Mains)","Essay Writing","Time Management in Exam","Revision & Retention","Optional Subject","Other"];
+function opts2html(arr){ return arr.map(o=>`<option>${escapeHtml(o)}</option>`).join(""); }
+function rPlanner(){
+  setView(`<h1 class="page">📝 Study Planner</h1><p class="lead">A battle-ready plan around your target. Exam dates come from a live source (or you're told to verify at upsc.gov.in).</p>
+  <div class="card">
+    <div class="row">
+      <div><label>Attempt year</label><select id="pYear"><option>2026</option><option>2027</option><option>2028</option><option>2029</option></select></div>
+      <div><label>Daily study hours</label><select id="pHours"><option>2-4</option><option selected>4-6</option><option>6-8</option><option>8-10</option></select></div>
+      <div><label>Attempt number</label><select id="pAtt"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
+    </div>
+    <div class="row">
+      <div><label>Optional subject</label><select id="pOpt">${opts2html(OPTIONAL_SUBJECTS)}</select></div>
+      <div><label>Primary weak area</label><select id="pWeak">${opts2html(GS_WEAK_AREAS)}</select></div>
+    </div>
+    <div id="pOptOtherWrap" class="hidden"><label>Specify optional subject</label><input id="pOptOther" placeholder="e.g. Kashmiri Literature"/></div>
+    <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:13px">➕ Add secondary weak area (optional)</summary><label>Secondary weak area</label><select id="pWeak2"><option>None</option>${opts2html(GS_WEAK_AREAS.slice(1))}</select></details>
+    <div style="height:14px"></div>
+    <button class="btn brand" id="pBtn">Generate plan</button>
+    <div class="out" id="pOut"><span class="muted">Your plan will appear here.</span></div>
+  </div>`);
+  $("#pOpt").addEventListener("change",()=>$("#pOptOtherWrap").classList.toggle("hidden",$("#pOpt").value!=="Other"));
+  $("#pBtn").addEventListener("click",()=>{
+    let optional=$("#pOpt").value;
+    if(optional==="Other") optional=$("#pOptOther").value.trim()||"Other";
+    else if(optional==="Not decided yet") optional="Not decided";
+    let weak=$("#pWeak").value;
+    const w2=$("#pWeak2").value; if(w2 && w2!=="None") weak=weak+", "+w2;
+    streamInto($("#pOut"),"/planner/generate",{goal:"UPSC "+$("#pYear").value, hours:$("#pHours").value, optional, weak, attempt_number:$("#pAtt").value});
+  });
+}
+
+/* ---- NCERT ---- */
+async function rNcert(){
+  setView(`<h1 class="page">📚 NCERT Study</h1><p class="lead">Pick a class → subject → chapter. Get grounded notes, a mind map and practice questions, then chat with the chapter.</p>
+  <div class="card">
+    <div class="row">
+      <div><label>Class</label><select id="nClass"><option>Loading…</option></select></div>
+      <div><label>Subject</label><select id="nSub"><option>—</option></select></div>
+      <div><label>Chapter</label><select id="nChap"><option>—</option></select></div>
+    </div>
+    <div style="height:12px"></div>
+    <button class="btn brand" id="nBtn">Study this chapter</button>
+    <div id="nResult"></div>
+  </div>`);
+  const cls=$("#nClass"),sub=$("#nSub"),chap=$("#nChap");
+  function fill(sel,items){ sel.innerHTML=items.length?items.map(i=>`<option>${escapeHtml(i)}</option>`).join(""):`<option value="">—</option>`; }
+  try{ fill(cls,(await jget("/ncert/classes")).items||[]); }catch(e){ cls.innerHTML=`<option value="">(backend offline)</option>`; }
+  async function loadSub(){ sub.innerHTML=`<option>…</option>`; chap.innerHTML=`<option>—</option>`; try{ fill(sub,(await jget("/ncert/subjects/"+encodeURIComponent(cls.value))).items||[]); await loadChap(); }catch(e){ fill(sub,[]); } }
+  async function loadChap(){ chap.innerHTML=`<option>…</option>`; try{ fill(chap,(await jget("/ncert/chapters/"+encodeURIComponent(cls.value)+"/"+encodeURIComponent(sub.value))).items||[]); }catch(e){ fill(chap,[]); } }
+  cls.addEventListener("change",loadSub); sub.addEventListener("change",loadChap);
+  if(cls.value) await loadSub();
+  $("#nBtn").addEventListener("click",async()=>{
+    if(!cls.value||!sub.value||!chap.value) return;
+    const R=$("#nResult"); R.innerHTML=`<div class="out"><span class="spin"></span> Building your study session…</div>`;
+    try{
+      const d=await jpost("/ncert/study",{class_name:cls.value,subject:sub.value,chapter:chap.value});
+      R.innerHTML=`<div class="subtabs"><span class="subtab active" data-p="notes">���� Notes</span>${d.mindmap_html?`<span class="subtab" data-p="mind">🧠 Mind map</span>`:""}${d.questions_html?`<span class="subtab" data-p="q">❓ Questions</span>`:""}<span class="subtab" data-p="chat">💬 Chat</span></div>
+        <div id="nP_notes" class="out">${md(d.notes)}</div>
+        <div id="nP_mind" class="hidden"></div>
+        <div id="nP_q" class="hidden"></div>
+        <div id="nP_chat" class="hidden card"></div>`;
+      if(d.mindmap_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#nP_mind",R).appendChild(f); f.srcdoc=d.mindmap_html; }
+      if(d.questions_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#nP_q",R).appendChild(f); f.srcdoc=d.questions_html; }
+      mountChat($("#nP_chat",R),"ncert",(q,hist)=>({path:"/ncert/chat",body:{question:q,class_name:cls.value,subject:sub.value,chapter:chap.value,chat_history:hist}}),{placeholder:"Ask about this chapter…",save:"ncert"});
+      R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{
+        R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active");
+        ["notes","mind","q","chat"].forEach(p=>{ const e=$("#nP_"+p,R); if(e)e.classList.toggle("hidden",p!==t.dataset.p); });
+      }));
+    }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  });
+}
+
+/* ---- LECTURE ---- */
+function rLecture(){
+  setView(`<h1 class="page">🎥 Lecture AI</h1><p class="lead">Paste a YouTube lecture URL — get structured notes, then ask follow-up questions. (Needs an available transcript.)</p>
+  <div class="card">
+    <div class="row"><div style="flex:3"><label>YouTube URL</label><input id="lUrl" placeholder="https://www.youtube.com/watch?v=…"/></div>
+      <div><label>Notes language</label><select id="lMed"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div></div>
+    <div id="lThumb"></div><div style="height:12px"></div><button class="btn brand" id="lBtn">Process lecture</button>
+    <div id="lResult"></div>
+  </div>`);
+  $("#lUrl").addEventListener("input",()=>{ const vid=extractVideoId($("#lUrl").value.trim()); $("#lThumb").innerHTML = vid?('<div style="margin-top:10px;display:flex;gap:12px;align-items:center"><img src="https://img.youtube.com/vi/'+vid+'/mqdefault.jpg" style="width:120px;height:68px;border-radius:8px;object-fit:cover;border:1px solid var(--line)"/><div><span class="pill" style="color:var(--ok)">✅ Video detected</span><div class="muted" style="font-size:12px;margin-top:4px">ID: '+escapeHtml(vid)+'</div></div></div>'):""; });
+  $("#lBtn").addEventListener("click",async()=>{
+    const url=$("#lUrl").value.trim(); if(!url) return; const R=$("#lResult");
+    R.innerHTML=`<div class="out"><span class="spin"></span> Fetching transcript & building notes… (can take a bit)</div>`;
+    try{
+      const d=await jpost("/lecture/process",{youtube_url:url, medium:$("#lMed").value});
+      const ti=d.topic_info||{}; let tiBanner="";
+      if(ti.topic && ti.topic!=="Unknown"){ tiBanner='<div class="card" style="margin-top:12px"><span class="pill">📌 '+escapeHtml(ti.topic||"")+'</span> <span class="pill">📋 '+escapeHtml(ti.paper||"")+'</span>'; if(ti.subtopics && ti.subtopics.length){ tiBanner+=' <span class="muted" style="font-size:12px">🔖 '+escapeHtml(ti.subtopics.join(", "))+'</span>'; } tiBanner+='</div>'; }
+      R.innerHTML=`${tiBanner}<div class="subtabs"><span class="subtab active" data-p="notes">📝 Notes</span>${d.mindmap_html?`<span class="subtab" data-p="mind">🧠 Mind map</span>`:""}${d.questions_html?`<span class="subtab" data-p="q">❓ Questions</span>`:""}<span class="subtab" data-p="chat">💬 Chat</span></div>
+        <div id="lP_notes" class="out">${md(d.notes)}</div><div id="lP_mind" class="hidden"></div><div id="lP_q" class="hidden"></div><div id="lP_chat" class="hidden card"></div>`;
+      if(d.mindmap_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_mind",R).appendChild(f); f.srcdoc=d.mindmap_html; }
+      if(d.questions_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_q",R).appendChild(f); f.srcdoc=d.questions_html; }
+      mountChat($("#lP_chat",R),"lecture",(q,hist)=>({path:"/lecture/chat",body:{question:q,video_id:d.video_id,topic_info:d.topic_info||{},chat_history:hist}}),{placeholder:"Ask about this lecture…",save:"lecture"});
+      R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); ["notes","mind","q","chat"].forEach(p=>{const e=$("#lP_"+p,R); if(e)e.classList.toggle("hidden",p!==t.dataset.p);}); }));
+    }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  });
+}
+
+/* ---- CURRENT AFFAIRS ---- */
+function rCA(){
+  setView(`<h1 class="page">📰 Current Affairs</h1><p class="lead">Grounded in real feeds (PIB, The Hindu, Indian Express, Down To Earth). Always cross-verify before the exam.</p>
+  <div class="subtabs"><span class="subtab active" data-p="daily">📅 Daily</span><span class="subtab" data-p="ed">📝 Editorial</span><span class="subtab" data-p="mon">🗓️ Monthly</span></div>
+  <div class="card" id="caDaily">
+    <div class="row"><div style="flex:3"><label>Date</label><select id="caDate"><option>Loading…</option></select></div>
+      <div style="align-self:flex-end"><button class="btn brand" id="caDailyBtn" style="width:100%">Get daily CA</button></div></div>
+    <div class="out" id="caDailyOut"><span class="muted">Pick a date.</span></div>
+  </div>
+  <div class="card hidden" id="caEd">
+    <div class="row"><div style="flex:3"><label>Editorial topic</label><select id="caTopic"><option>Loading…</option></select></div>
+      <div style="align-self:flex-end"><button class="btn brand" id="caEdBtn" style="width:100%">Get editorial</button></div></div>
+    <div class="out" id="caEdOut"><span class="muted">Pick a topic.</span></div>
+  </div>
+  <div class="card hidden" id="caMon">
+    <div class="row"><div><label>Month</label><select id="caMonth"><option>Loading…</option></select></div>
+      <div style="align-self:flex-end"><button class="btn brand" id="caMonBtn" style="width:100%">Get monthly digest</button></div></div>
+    <div class="out" id="caMonOut"><span class="muted">Pick a month.</span></div>
+  </div>`);
+  view().querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{
+    view().querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active");
+    $("#caDaily").classList.toggle("hidden",t.dataset.p!=="daily");
+    $("#caEd").classList.toggle("hidden",t.dataset.p!=="ed");
+    $("#caMon").classList.toggle("hidden",t.dataset.p!=="mon");
+  }));
+  (async()=>{ try{ const dts=(await jget("/current-affairs/dates")).dates||[]; $("#caDate").innerHTML=dts.length?dts.map(d=>`<option>${escapeHtml(d)}</option>`).join(""):`<option>Today</option>`; }catch(e){ $("#caDate").innerHTML=`<option>Today</option>`; } })();
+  (async()=>{ try{ const tp=(await jget("/current-affairs/topics")).topics||[]; $("#caTopic").innerHTML=tp.map(t=>`<option>${escapeHtml(t)}</option>`).join(""); }catch(e){ $("#caTopic").innerHTML=`<option>(offline)</option>`; } })();
+  (async()=>{ try{ const ms=(await jget("/current-affairs/months")).months||[]; $("#caMonth").innerHTML=ms.map(m=>{const a=Array.isArray(m)?m:[m,""]; return `<option value='${escapeHtml(a[0])}|${escapeHtml(a[1])}'>${escapeHtml(a[0])} ${escapeHtml(a[1])}</option>`;}).join(""); }catch(e){ $("#caMonth").innerHTML=`<option>(offline)</option>`; } })();
+  $("#caDailyBtn").addEventListener("click",()=>streamInto($("#caDailyOut"),"/current-affairs/daily",{date:$("#caDate").value}));
+  $("#caEdBtn").addEventListener("click",()=>streamInto($("#caEdOut"),"/current-affairs/editorial",{topic:$("#caTopic").value}));
+  $("#caMonBtn").addEventListener("click",()=>{ const v=($("#caMonth").value||"|").split("|"); streamInto($("#caMonOut"),"/current-affairs/monthly",{month:v[0],year:v[1]}); });
+}
+
+/* ---- MY PDFs (upload) ---- */
+function rUpload(){
+  setView(`<h1 class="page">📄 My PDFs</h1><p class="lead">Upload a study PDF (Laxmikanth, Spectrum, your notes). Get AI notes and chat grounded on that document.</p>
+  <div class="card">
+    <label>Choose a PDF</label><input type="file" id="uFile" accept="application/pdf"/>
+    <div style="height:12px"></div><button class="btn brand" id="uBtn">Upload & read</button>
+    <div id="uResult"></div>
+  </div>`);
+  $("#uBtn").addEventListener("click",async()=>{
+    const f=$("#uFile").files[0]; if(!f){ return; } const R=$("#uResult");
+    R.innerHTML=`<div class="out"><span class="spin"></span> Uploading & reading the PDF…</div>`;
+    try{
+      const d=await jpostFile("/upload/process",f);
+      const bi=d.book_info||{};
+      R.innerHTML=`<div style="margin-top:12px"><span class="pill">${escapeHtml(bi.book||bi.book_name||d.filename||"Document")}</span> <span class="pill">${escapeHtml(bi.paper||"Check syllabus")}</span></div>
+        <div class="subtabs" style="margin-top:12px"><span class="subtab active" data-p="notes">📝 Notes</span><span class="subtab" data-p="chat">💬 Chat</span></div>
+        <div id="uP_notes" class="out">${md(d.notes)}</div><div id="uP_chat" class="hidden card"></div>`;
+      mountChat($("#uP_chat",R),"upload",(q,hist)=>({path:"/upload/chat",params:{pdf_hash:d.hash},body:{request:{question:q,chat_history:hist},book_info:bi}}),{placeholder:"Ask about this PDF…",save:"upload"});
+      R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); ["notes","chat"].forEach(p=>$("#uP_"+p,R).classList.toggle("hidden",p!==t.dataset.p)); }));
+    }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  });
+}
+
+/* ---- PYQ ---- */
+const GS_SUBJECTS={GS1:["Any Subject","History","Geography","Indian Society","Art & Culture","World History"],GS2:["Any Subject","Polity","Governance","Constitution","Social Justice","International Relations"],GS3:["Any Subject","Economy","Environment","Science & Tech","Internal Security","Disaster Management"],GS4:["Any Subject","Ethics","Integrity","Aptitude","Case Studies"]};
+function answerToIdx(ans,opts){ if(ans==null) return 0; const s=String(ans).trim(); const m=s.match(/^\(?([a-dA-D])\)?/); if(m) return m[1].toLowerCase().charCodeAt(0)-97; for(let i=0;i<(opts||[]).length;i++){ if(String(opts[i]).trim().toLowerCase()===s.toLowerCase()) return i; } if(/^\d+$/.test(s)) return Math.max(0,parseInt(s)-1); return 0; }
+function normalizeQuestions(qs,paper,subject){ const out=[]; (qs||[]).forEach(q=>{ if(typeof q!=="object") return; let opts=q.options||[]; if(typeof opts==="string"){ opts=opts.split(/\n/).filter(l=>/^\s*\(?[a-dA-D][\)\.]/.test(l)).map(l=>l.replace(/^\s*\(?[a-dA-D][\)\.]\s*/,"").trim()); } if(Array.isArray(opts)&&opts.length>6) opts=opts.slice(0,4); let ai=q.answer_idx; if(ai==null) ai=answerToIdx(q.answer,opts); const t=String(q.type||"").toLowerCase(); let type=(t.includes("main")||t.includes("descript")||t.includes("subject"))?"mains":((opts.length||["mcq","mcqs","prelims","objective"].includes(t))?"prelims":"mains"); if(!(ai>=0&&ai<opts.length)) ai=0; const ans=opts.length&&ai<opts.length?opts[ai]:(q.answer||""); out.push({question:q.question||"",options:opts,answer_idx:ai,answer:ans,explanation:q.explanation||"",type,paper:q.paper||paper||"",subject:q.subject||subject||""}); }); return out; }
+
+/* Prelims statements ko line-by-line dikhane ke liye (app.py jaisa pre-line) */
+function fmtQuestion(s){
+  s=(s||"").replace(/\r/g,"").trim();
+  s=s.replace(/([^\n])\s+(\d{1,2})[\.\)]\s+/g, "$1\n$2. ");
+  s=s.replace(/\s+(Which of the (?:statements?|above|given))/gi, "\n$1");
+  s=s.replace(/\s+(How many of the above)/gi, "\n$1");
+  s=s.replace(/\s+(Select the correct (?:answer|code|option))/gi, "\n$1");
+  s=s.replace(/\s+(Consider the following)/gi, "\n$1");
+  return s.trim();
+}
+function rPYQ(){
+  setView(`<h1 class="page">📝 PYQ Practice</h1><p class="lead">Practice UPSC-style questions — AI-generated, from your own PYQ-bank PDFs, or from a lecture. These are practice questions (not claimed as real past papers); always cross-check answers.</p>
+  <div class="card">
+    <div class="row">
+      <div><label>Source</label><select id="qSrc"><option value="ai">🤖 AI-generated</option><option value="bank">📚 My PYQ bank</option><option value="lecture">🎥 From a lecture</option><option value="paste">✏️ Paste your question</option></select></div>
+      <div><label>Paper</label><select id="qPaper"><option>GS1</option><option>GS2</option><option>GS3</option><option>GS4</option></select></div>
+      <div><label>Subject</label><select id="qSub"></select></div>
+    </div>
+    <div class="row">
+      <div><label>Type</label><select id="qType"><option>Prelims</option><option>Mains</option></select></div>
+      <div><label>Count</label><select id="qCount"><option>5</option><option>10</option><option>15</option><option>20</option><option>25</option></select></div>
+      <div><label>Difficulty</label><select id="qDiff"><option>Easy</option><option selected>Medium</option><option>Hard</option></select></div>
+    </div>
+    <div id="qLecRow" class="hidden"><label>YouTube URL (for lecture source)</label><input id="qLecUrl" placeholder="https://youtube.com/watch?v=…"/></div>
+    <div id="qBankRow" class="hidden"><div class="barbox" id="qBankStatus">Checking bank…</div><input type="file" id="qBankFile" accept="application/pdf"/><div style="height:8px"></div><button class="btn sm" id="qBankUp">Upload PYQ PDF to bank</button> <button class="btn sm" id="qBankClear">Clear bank</button><div id="qBankMsg"></div></div>
+    <div id="qPasteRow" class="hidden"><label>Paste your question (Prelims with (a)(b)(c)(d) options, or a Mains question)</label><textarea id="qPasteText" placeholder="Paste the full question here…"></textarea></div>
+    <div style="height:14px"></div><button class="btn brand" id="qGen">Generate questions</button>
+    <div id="qSession" style="margin-top:16px"></div>
+  </div>`);
+  const paper=$("#qPaper"),sub=$("#qSub"),src=$("#qSrc");
+  function fillSub(){ sub.innerHTML=(GS_SUBJECTS[paper.value]||["Any Subject"]).map(s=>`<option>${escapeHtml(s)}</option>`).join(""); }
+  fillSub(); paper.addEventListener("change",fillSub);
+  function srcUI(){ $("#qLecRow").classList.toggle("hidden",src.value!=="lecture"); $("#qBankRow").classList.toggle("hidden",src.value!=="bank"); $("#qPasteRow").classList.toggle("hidden",src.value!=="paste"); if(src.value==="bank") refreshBank(); }
+  src.addEventListener("change",srcUI);
+  async function refreshBank(){ try{ const ex=(await jget("/pyq/bank/status")).exists; $("#qBankStatus").innerHTML=ex?"✅ You have PYQ papers in your bank.":"📭 Your bank is empty — upload a PYQ PDF first."; }catch(e){ $("#qBankStatus").innerHTML="(could not check bank)"; } }
+  $("#qBankUp").addEventListener("click",async()=>{ const f=$("#qBankFile").files[0]; if(!f) return; $("#qBankMsg").innerHTML=`<div class="muted"><span class="spin"></span> Uploading…</div>`; try{ const d=await jpostFile("/pyq/bank/upload",f); $("#qBankMsg").innerHTML=`<div class="ok">✅ Added (${d.approx_questions||d.chunks||"?"} chunks).</div>`; refreshBank(); }catch(e){ $("#qBankMsg").innerHTML=`<div class="err">⚠️ ${escapeHtml(e.message)}</div>`; } });
+  $("#qBankClear").addEventListener("click",async()=>{ try{ await jpost("/pyq/bank/clear"); $("#qBankMsg").innerHTML=`<div class="ok">Bank cleared.</div>`; refreshBank(); }catch(e){} });
+  $("#qGen").addEventListener("click",doGenerate);
+
+  async function doGenerate(){
+    const S=$("#qSession"); S.innerHTML=`<div class="out"><span class="spin"></span> Generating questions…</div>`;
+    const qt=$("#qType").value.toLowerCase(); const question_type=qt.startsWith("prelims")?"mcq":"mains";
+    const subject=sub.value, topic=(subject&&subject!=="Any Subject")?subject:paper.value;
+    const common={question_type,num_questions:parseInt($("#qCount").value)||5,marks:10,difficulty:$("#qDiff").value.toLowerCase()};
+    try{
+      if(src.value==="paste"){ const txt=$("#qPasteText").value.trim(); if(!txt){ S.innerHTML='<div class="out err">Please paste a question first.</div>'; return; } const parsed=await jpost("/pyq/parse",{text:txt}); const qs=normalizeQuestions(parsed.questions||[],paper.value,sub.value); if(!qs.length){ S.innerHTML='<div class="out muted">Could not parse that into a question. Check the format and try again.</div>'; return; } runSession(qs,S); return; }
+      let text="", notice="";
+      if(src.value==="ai"){ const d=await jpost("/pyq/generate/sync",{topic, ...common}); text=d.response||""; }
+      else if(src.value==="bank"){ const d=await jpost("/pyq/bank/generate/sync",{topic:(subject&&subject!=="Any Subject")?subject:"", ...common}); text=d.response||""; }
+      else { const url=$("#qLecUrl").value.trim(); if(!url){ S.innerHTML=`<div class="out err">Please paste a YouTube URL.</div>`; return; } const d=await jpost("/pyq/lecture/generate/sync",{youtube_url:url,topic:(subject&&subject!=="Any Subject")?subject:"", ...common}); text=d.response||""; }
+      if(!text.trim()){ S.innerHTML=`<div class="out muted">No questions generated.</div>`; return; }
+      const parsed=await jpost("/pyq/parse",{text});
+      const qs=normalizeQuestions(parsed.questions||[],paper.value,subject);
+      if(!qs.length){ const firstLine=(text.split(/\n/).find(l=>l.trim())||"").replace(/^>\s*/,""); S.innerHTML=`<div class="out muted">${escapeHtml(firstLine||"Could not parse questions. Raw:")}<div style="margin-top:8px">${md(text)}</div></div>`; return; }
+      runSession(qs,S);
+    }catch(e){ S.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  }
+}
+function runSession(qs,S){
+  let i=0,score=0,attempted=0;
+  S.innerHTML=""; const head=el(`<div class="barbox"></div>`); S.appendChild(head);
+  const box=el(`<div class="card"></div>`); S.appendChild(box);
+  function showHead(){ head.innerHTML=`Question <b>${i+1}</b> / ${qs.length} &nbsp;·&nbsp; Score: <b>${score}</b>/${attempted}`; }
+  function render(){
+    showHead(); const q=qs[i]; box.innerHTML="";
+    box.appendChild(el(`<div style="font-weight:600;margin-bottom:6px"><span class="pill">${q.type=="mains"?"Mains":"Prelims"}</span> ${escapeHtml(q.subject||q.paper||"")}</div>`));
+    box.appendChild(el(`<div class="out" style="margin-top:4px;white-space:pre-line;line-height:1.9">${escapeHtml(fmtQuestion(q.question))}</div>`));
+    if(q.type==="prelims" && q.options.length){
+      const opts=el(`<div style="margin-top:12px"></div>`); box.appendChild(opts);
+      q.options.forEach((o,idx)=>{ const b=el(`<button class="qopt">${String.fromCharCode(97+idx)}) ${escapeHtml(o)}</button>`);
+        b.addEventListener("click",()=>{ opts.querySelectorAll(".qopt").forEach(x=>x.classList.add("disabled")); attempted++; const correct=q.answer_idx; if(idx===correct){ b.classList.add("correct"); score++; } else { b.classList.add("wrong"); const cb=opts.querySelectorAll(".qopt")[correct]; if(cb)cb.classList.add("correct"); }
+          showHead(); const ex=el(`<div class="out" style="margin-top:10px"><b>Answer:</b> ${String.fromCharCode(97+correct)}) ${escapeHtml(q.options[correct]||q.answer)}<br>${q.explanation?md(q.explanation):""}</div>`); box.appendChild(ex);
+          const explainBtn=el(`<button class="btn sm" style="margin-top:8px">🔎 Explain more</button>`); box.appendChild(explainBtn); const exOut=el(`<div class="out hidden" style="margin-top:8px"></div>`); box.appendChild(exOut);
+          explainBtn.addEventListener("click",()=>{ exOut.classList.remove("hidden"); streamInto(exOut,"/pyq/explain",{question:q.question,options:q.options,answer:q.answer}); });
+          box.appendChild(navRow());
+        });
+        opts.appendChild(b); });
+    } else {
+      box.appendChild(el(`<div class="muted" style="margin-top:10px">Write your answer, then evaluate it in the ✍️ Evaluator. Model framework (if provided) below:</div>`));
+      if(q.explanation) box.appendChild(el(`<div class="out" style="margin-top:8px">${md(q.explanation)}</div>`));
+      const ta=el(`<textarea placeholder="Write your answer here…" style="margin-top:10px"></textarea>`); box.appendChild(ta);
+      const evBtn=el(`<button class="btn sm" style="margin-top:8px">✍️ Evaluate this answer</button>`); box.appendChild(evBtn);
+      const evOut=el(`<div class="out hidden" style="margin-top:8px"></div>`); box.appendChild(evOut);
+      evBtn.addEventListener("click",()=>{ const a=ta.value.trim(); if(a.length<30){ evOut.classList.remove("hidden"); evOut.innerHTML=`<span class="err">Write at least ~30 characters.</span>`; return;} evOut.classList.remove("hidden"); streamInto(evOut,"/evaluator/mains",{question:q.question,answer:a,marks:10,keywords:null,word_limit:150}); });
+      box.appendChild(navRow());
+    }
+  }
+  function navRow(){ const r=el(`<div style="margin-top:14px;display:flex;gap:8px"></div>`);
+    const prev=el(`<button class="btn sm">← Prev</button>`); const next=el(`<button class="btn sm brand">Next →</button>`);
+    prev.disabled=i===0; next.disabled=i===qs.length-1;
+    prev.addEventListener("click",()=>{ if(i>0){i--;render();} }); next.addEventListener("click",()=>{ if(i<qs.length-1){i++;render();} });
+    r.appendChild(prev); r.appendChild(next); return r; }
+  render();
+}
+
+/* ---- EVALUATOR ---- */
+function rEval(){
+  setView(`<h1 class="page">✍️ Answer Evaluator</h1><p class="lead">Write a full answer and get indicative scoring, feedback and a model answer. (AI evaluation — verify facts against standard sources.)</p>
+  <div class="subtabs"><span class="subtab active" data-p="gen">📋 General</span><span class="subtab" data-p="mains">🏛️ Mains (marks)</span><span class="subtab" data-p="model">📖 Model answer</span></div>
+  <div class="card" id="evGen">
+    <label>Question</label><textarea id="egQ" placeholder="Paste the question…"></textarea>
+    <label>Your answer (min ~50 chars)</label><textarea id="egA" style="min-height:160px"></textarea>
+    <div style="height:10px"></div><button class="btn brand" id="egBtn">Evaluate</button>
+    <div class="out" id="egOut"><span class="muted">Feedback will appear here.</span></div>
+  </div>
+  <div class="card hidden" id="evMains">
+    <label>Question</label><textarea id="emQ"></textarea>
+    <div class="row"><div><label>Marks</label><select id="emMarks"><option>10</option><option>15</option><option>5</option></select></div>
+      <div><label>Word limit</label><input id="emWords" value="150"/></div>
+      <div><label>Keywords (comma-sep, optional)</label><input id="emKw" placeholder="federalism, Article 356…"/></div></div>
+    <label>Your answer (min ~30 chars)</label><textarea id="emA" style="min-height:160px"></textarea>
+    <div style="height:10px"></div><button class="btn brand" id="emBtn">Evaluate mains answer</button>
+    <div class="out" id="emOut"><span class="muted">Scoring will appear here.</span></div>
+  </div>
+  <div class="card hidden" id="evModel">
+    <label>Question</label><textarea id="eaQ"></textarea>
+    <div class="row"><div><label>Marks</label><select id="eaMarks"><option>10</option><option>15</option><option>5</option></select></div>
+      <div><label>Word limit</label><input id="eaWords" value="150"/></div></div>
+    <div style="height:10px"></div><button class="btn brand" id="eaBtn">Get model answer</button>
+    <div class="out" id="eaOut"><span class="muted">Model answer will appear here.</span></div>
+  </div>`);
+  view().querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ view().querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); $("#evGen").classList.toggle("hidden",t.dataset.p!=="gen"); $("#evMains").classList.toggle("hidden",t.dataset.p!=="mains"); $("#evModel").classList.toggle("hidden",t.dataset.p!=="model"); }));
+  $("#egBtn").addEventListener("click",()=>{ const q=$("#egQ").value.trim(),a=$("#egA").value.trim(); if(a.length<50){ $("#egOut").innerHTML=`<span class="err">Answer must be at least ~50 characters.</span>`; return;} streamInto($("#egOut"),"/evaluator/evaluate",{question:q,answer:a}); });
+  $("#emBtn").addEventListener("click",()=>{ const q=$("#emQ").value.trim(),a=$("#emA").value.trim(); if(a.length<30){ $("#emOut").innerHTML=`<span class="err">Answer must be at least ~30 characters.</span>`; return;} const kw=$("#emKw").value.trim()?$("#emKw").value.split(",").map(s=>s.trim()).filter(Boolean):null; streamInto($("#emOut"),"/evaluator/mains",{question:q,answer:a,marks:parseInt($("#emMarks").value),keywords:kw,word_limit:parseInt($("#emWords").value)||150}); });
+  $("#eaBtn").addEventListener("click",()=>{ const q=$("#eaQ").value.trim(); if(q.length<5){ $("#eaOut").innerHTML=`<span class="err">Enter a question.</span>`; return;} streamInto($("#eaOut"),"/evaluator/model-answer",{question:q,marks:parseInt($("#eaMarks").value),keywords:null,word_limit:parseInt($("#eaWords").value)||150}); });
+}
+
+/* ---- HISTORY ---- */
+async function rHistory(){
+  setView(`<h1 class="page">🕒 History</h1><p class="lead">Your saved conversations (per account).</p><div class="card" id="hList"><span class="muted"><span class="spin"></span> Loading…</span></div>`);
+  try{
+    const d=await jget("/history/conversations"); const convos=d.conversations||[];
+    if(!convos.length){ $("#hList").innerHTML=`<span class="muted">No saved conversations yet.</span>`; return; }
+    $("#hList").innerHTML=convos.map(c=>`<div class="qopt" data-id="${c.id}"><b>${escapeHtml(c.title||"(untitled)")}</b> <span class="pill">${escapeHtml(c.agent||"")}</span><div class="muted" style="font-size:12px">${escapeHtml((c.updated_at||c.created_at||"").slice(0,10))}</div></div>`).join("")+`<div class="out hidden" id="hMsgs"></div>`;
+    $("#hList").querySelectorAll("[data-id]").forEach(b=>b.addEventListener("click",async()=>{
+      const box=$("#hMsgs"); box.classList.remove("hidden"); box.innerHTML=`<span class="spin"></span>`;
+      try{ const m=await jget("/history/conversations/"+b.dataset.id+"/messages"); box.innerHTML=(m.messages||[]).map(x=>`<div class="msg ${x.role==="user"?"user":"bot"}" style="max-width:100%">${md(x.content)}</div>`).join("")||`<span class="muted">Empty.</span>`; }
+      catch(e){ box.innerHTML=`<span class="err">⚠️ ${escapeHtml(e.message)}</span>`; }
+    }));
+  }catch(e){ $("#hList").innerHTML=`<span class="err">⚠️ ${escapeHtml(e.message)} — is the backend running?</span>`; }
+}
+
+/* ============================================================
+   BOOT  (splash -> login/welcome)
+   ============================================================ */
+function boot(){
+  const vtok=getVerifyToken();
+  const rtok=getResetToken();
+  let wantAuth=false; try{ wantAuth=new URL(window.location.href).searchParams.get("auth")==="1"; }catch(e){}
+  if(vtok){ renderVerifyEmail(vtok); }
+  else if(rtok){ renderResetPassword(rtok); }
+  else if(!token() && !wantAuth){ window.location.replace("landing.html"); return; }
+  else { render(); }
+  const sp=document.getElementById("splash");
+  if(!sp) return;
+  setTimeout(()=>{ sp.classList.add("gone"); setTimeout(()=>{ if(sp&&sp.remove) sp.remove(); }, 650); }, 1500);
+}
+
+function getVerifyToken(){
+  try{ return new URL(window.location.href).searchParams.get("verify_token")||""; }catch(e){ return ""; }
+}
+function clearParamFromUrl(name){
+  try{ const u=new URL(window.location.href); u.searchParams.delete(name); window.history.replaceState({}, document.title, u.pathname + (u.search||"") + (u.hash||"")); }catch(e){}
+}
+function renderVerifyEmail(vtok){
+  const h=document.getElementById("appHeader"); if(h) h.classList.add("hidden");
+  setView(`
+  <div class="auth-screen"><div class="auth-card card">
+    <div class="logo-big">✉️</div>
+    <div class="center" style="font-size:24px;font-weight:800;letter-spacing:-.5px">Verifying email…</div>
+    <div id="veMsg" class="center muted" style="font-size:13px;margin:16px 0"><span class="spin"></span> Please wait…</div>
+  </div></div>`);
+  doVerify(vtok);
+}
+async function doVerify(vtok){
+  try{
+    const r=await fetch(apiUrl("/auth/verify-email"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:vtok})});
+    if(r.status===200){ const d=await r.json(); clearParamFromUrl("verify_token");
+      if(d && d.access_token){ localStorage.setItem("upscai-token",d.access_token); const h=document.getElementById("appHeader"); if(h) h.classList.remove("hidden"); render(); return; }
+      setView(`<div class="auth-screen"><div class="auth-card card"><div class="logo-big">✅</div><div class="center" style="font-size:22px;font-weight:800">Email verified</div><div class="center muted" style="font-size:13px;margin:10px 0 18px">You can now sign in.</div><button class="btn brand" id="veGo" style="width:100%">🔓 Go to Sign In</button></div></div>`);
+      const g=$("#veGo"); if(g) g.addEventListener("click",()=>render());
+      return;
+    }
+    let detail=""; try{ detail=(await r.json()).detail; }catch(e){}
+    renderVerifyFailed(detail||("Verification failed (status "+r.status+")."));
+  }catch(e){ renderVerifyFailed("Couldn't connect to the server. Is the backend running at "+apiBase()+"?"); }
+}
+function renderVerifyFailed(msg){
+  clearParamFromUrl("verify_token");
+  const h=document.getElementById("appHeader"); if(h) h.classList.add("hidden");
+  setView(`
+  <div class="auth-screen"><div class="auth-card card">
+    <div class="logo-big">⚠️</div>
+    <div class="center" style="font-size:22px;font-weight:800">Verification failed</div>
+    <div class="center muted" style="font-size:13px;margin:10px 0 16px">${escapeHtml(msg)}</div>
+    <label>Resend verification to</label>
+    <input id="rvEmail" type="email" placeholder="you@example.com"/>
+    <div style="height:10px"></div>
+    <button class="btn brand" id="rvBtn" style="width:100%">✉️ Resend verification email</button>
+    <div id="rvMsg"></div>
+    <div class="center muted" style="font-size:12px;margin-top:14px"><span id="rvBack" style="cursor:pointer;text-decoration:underline">← Back to Sign In</span></div>
+  </div></div>`);
+  const b=$("#rvBtn"); if(b) b.addEventListener("click",()=>doResend($("#rvEmail").value.trim(), $("#rvMsg")));
+  const bk=$("#rvBack"); if(bk) bk.addEventListener("click",()=>render());
+}
+function renderVerifyPending(email){
+  const h=document.getElementById("appHeader"); if(h) h.classList.add("hidden");
+  setView(`
+  <div class="auth-screen"><div class="auth-card card">
+    <div class="logo-big">📧</div>
+    <div class="center" style="font-size:24px;font-weight:800;letter-spacing:-.5px">Check your email</div>
+    <div class="center muted" style="font-size:13px;margin:12px 0 16px">We sent a verification link to <b>${escapeHtml(email||"your email")}</b>. Click it to activate your account, then sign in.</div>
+    <button class="btn brand" id="vpResend" style="width:100%">✉️ Resend verification email</button>
+    <div id="vpMsg"></div>
+    <div class="center muted" style="font-size:12px;margin-top:14px"><span id="vpBack" style="cursor:pointer;text-decoration:underline">← Back to Sign In</span></div>
+  </div></div>`);
+  const b=$("#vpResend"); if(b) b.addEventListener("click",()=>doResend(email, $("#vpMsg")));
+  const bk=$("#vpBack"); if(bk) bk.addEventListener("click",()=>render());
+}
+async function doResend(email, m){
+  if(!m) return;
+  if(!email){ m.innerHTML=`<div class="err">Please enter your account email.</div>`; return; }
+  m.innerHTML=`<div class="muted" style="margin-top:8px"><span class="spin"></span> Sending…</div>`;
+  try{ const d=await jpost("/auth/resend-verification",{email}); m.innerHTML=`<div class="ok">${escapeHtml((d&&d.message)||"If an unverified account exists, a new link has been sent.")}</div>`; }
+  catch(e){ m.innerHTML=`<div class="err">⚠️ Something went wrong. Try again.</div>`; }
+}
+boot();
+</script>
+</body>
+</html>

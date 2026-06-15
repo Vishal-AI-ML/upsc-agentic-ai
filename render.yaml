@@ -1,0 +1,77 @@
+# Render Blueprint for UPSC Agentic AI (FastAPI + LangGraph)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: push this file to your repo root, then in Render -> "New +" ->
+# "Blueprint" -> pick the repo. Render reads this file and provisions the
+# service + persistent disk automatically.
+#
+# Secrets (sync: false) are NOT stored in this file. Set them once in the
+# Render dashboard (Environment tab). Never commit real keys.
+
+services:
+  - type: web
+    name: upsc-agentic-ai
+    runtime: python
+    plan: starter            # persistent disks require a paid instance (starter+)
+    region: singapore        # keep close to your Supabase region (ap-southeast-1)
+    branch: main
+
+    # uv-based build: install uv, then sync the locked dependency set.
+    buildCommand: "pip install uv && uv sync --frozen"
+
+    # Bind to Render's injected $PORT. host 0.0.0.0 is required on Render.
+    startCommand: "uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT"
+
+    # Render pings this to decide if a deploy is healthy.
+    healthCheckPath: /health
+
+    # Persistent disk so the Chroma vector store survives restarts/deploys.
+    disk:
+      name: chroma-data
+      mountPath: /var/data
+      sizeGB: 1
+
+    envVars:
+      # ----- Runtime -----
+      - key: PYTHON_VERSION
+        value: "3.13.13"
+
+      # ----- Vector store (points at the mounted disk above) -----
+      - key: CHROMA_PERSIST_DIR
+        value: /var/data/chroma_db
+      - key: SIMILARITY_THRESHOLD
+        value: "0.3"
+      - key: MENTOR_KB_THRESHOLD
+        value: "0.25"
+
+      # ----- LLM providers -----
+      - key: ENABLE_PROVIDER_FALLBACK
+        value: "true"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+      # ----- Supabase Postgres (DB + custom JWT auth + checkpointer + store) -----
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "false"
+
+      # ----- Web search -----
+      - key: TAVILY_API_KEY
+        sync: false
+
+      # ----- Observability -----
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://cloud.langfuse.com
+
+      # ----- CORS (set to your frontend/custom domain, comma-separated) -----
+      - key: CORS_ORIGINS
+        sync: false

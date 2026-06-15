@@ -1,0 +1,46 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# ---- Virtual env (uv) ----
+.venv/
+venv/
+env/
+
+# ---- Secrets (NEVER commit) ----
+.env
+.env.*
+!.env.example
+
+# ---- Vector store / local DBs (regenerated, do not commit) ----
+chroma_db/
+*.sqlite
+*.sqlite3
+*.db
+upsc_app.db
+
+# ---- Caches / tooling ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+.coverage
+htmlcov/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Misc downloads / scratch ----
+*.tmp
