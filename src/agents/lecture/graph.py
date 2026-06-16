@@ -79,17 +79,62 @@ def get_transcript(video_id: str) -> tuple[str, str]:
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
+        # Cloud hosts (e.g. Render) use shared datacenter IPs that YouTube
+        # frequently bot-blocks for the default "web" client. Asking yt-dlp to
+        # try the mobile API clients first markedly improves success from
+        # server environments.
+        "extractor_args": {
+            "youtube": {"player_client": ["android", "ios", "web"]}
+        },
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
+        },
     }
+
+    # Optional escape hatches for datacenter IP blocks (configured via env):
+    #   YTDLP_PROXY   -> residential/HTTP proxy URL (host:port, optional auth)
+    #   YTDLP_COOKIES -> path to a Netscape cookies.txt exported from a
+    #                    logged-in YouTube session
+    import os
+    _proxy = os.getenv("YTDLP_PROXY", "").strip()
+    if _proxy:
+        ydl_opts["proxy"] = _proxy
+    _cookies = os.getenv("YTDLP_COOKIES", "").strip()
+    if _cookies and os.path.exists(_cookies):
+        ydl_opts["cookiefile"] = _cookies
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:
-        logger.error(f"yt-dlp extract failed: {e}")
+        err = str(e)
+        logger.error(f"yt-dlp extract failed: {err}")
+        low = err.lower()
+        if any(s in low for s in (
+            "sign in", "confirm you", "not a bot", "429",
+            "too many requests", "blocked",
+        )):
+            raise ValueError(
+                "⏳ YouTube temporarily blocked our server from reading "
+                "this video — this can happen on shared cloud IPs. Please "
+                "try again in a little while. If it keeps happening, this "
+                "lecture’s captions can’t be fetched automatically from "
+                "our server."
+            )
+        if "private" in low or "members-only" in low or "age" in low:
+            raise ValueError(
+                "🔒 This video looks private or age-restricted, so we "
+                "can’t read its captions. Please try a publicly available "
+                "lecture."
+            )
         raise ValueError(
-            "🔒 We couldn’t access this video. It may be private, "
-            "age-restricted, or the link may be incorrect. Please check "
-            "the URL and try a publicly available lecture."
+            "🔒 We couldn’t access this video. It may be "
+            "unavailable, region-locked, or the link may be incorrect. Please "
+            "check the URL and try a publicly available lecture."
         )
     
     auto_captions = info.get("automatic_captions", {})
