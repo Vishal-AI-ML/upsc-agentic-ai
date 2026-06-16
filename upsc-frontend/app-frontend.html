@@ -438,11 +438,21 @@ function addFeedback(botEl,agent,q,ans){
 /* Generic chat: sendFn(question, historyArr) -> {path, body, params} */
 function mountChat(container, agent, buildReq, opts){
   opts=opts||{};
-  const history=[];
-  container.innerHTML=`<div class="chat" id="chat_${agent}"></div>
+  let history=[];
+  container.innerHTML=`${opts.save?`<div class="chat-toolbar" id="ctb_${agent}" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button class="btn sm brand" id="cnew_${agent}">🆕 New chat</button><select id="cpast_${agent}" class="btn sm" style="max-width:260px;cursor:pointer"><option value="">📂 Past chats…</option></select><span class="muted" id="cstat_${agent}" style="font-size:12px"></span></div>`:""}<div class="chat" id="chat_${agent}"></div>
     <div class="chat-input"><input id="ci_${agent}" placeholder="${opts.placeholder||"Ask a question…"}"/><button class="btn brand" id="cs_${agent}">Send</button></div>`;
   const chat=$("#chat_"+agent,container), input=$("#ci_"+agent,container), send=$("#cs_"+agent,container);
-  if(opts.intro){ chat.appendChild(el(`<div class="msg bot">${md(opts.intro)}</div>`)); }
+  function showIntro(){ if(opts.intro){ chat.appendChild(el(`<div class="msg bot">${md(opts.intro)}</div>`)); } }
+  showIntro();
+  if(opts.save){
+    const tbNew=$("#cnew_"+agent,container), tbPast=$("#cpast_"+agent,container), tbStat=$("#cstat_"+agent,container);
+    function newChat(){ history=[]; CONV_IDS[opts.save]=undefined; chat.innerHTML=""; showIntro(); if(tbPast) tbPast.value=""; if(tbStat) tbStat.textContent="🆕 New conversation"; if(input) input.focus(); }
+    async function loadPast(){ try{ const d=await jget("/history/conversations",{agent:opts.save}); const cs=d.conversations||[]; tbPast.innerHTML=`<option value="">📂 Past chats…</option>`+cs.map(c=>`<option value="${c.id}">${escapeHtml((c.title||"(untitled)").slice(0,40))} · ${escapeHtml((c.updated_at||c.created_at||"").slice(0,10))}</option>`).join(""); }catch(e){} }
+    async function openConvo(id){ if(!id) return; chat.innerHTML=`<div class="msg bot"><span class="spin"></span></div>`; try{ const m=await jget("/history/conversations/"+id+"/messages"); const msgs=m.messages||[]; chat.innerHTML=""; history=[]; msgs.forEach(x=>{ const u=x.role==="user"; chat.appendChild(el(`<div class="msg ${u?"user":"bot"}">${u?escapeHtml(x.content):md(x.content)}</div>`)); history.push({role:u?"user":"assistant",content:x.content}); }); CONV_IDS[opts.save]=id; if(tbStat) tbStat.textContent="📂 Resumed"; chat.scrollTop=chat.scrollHeight; }catch(e){ chat.innerHTML=`<span class="err">⚠️ ${escapeHtml(e.message)}</span>`; } }
+    if(tbNew) tbNew.addEventListener("click",newChat);
+    if(tbPast){ tbPast.addEventListener("focus",loadPast); tbPast.addEventListener("change",()=>openConvo(tbPast.value)); }
+    loadPast();
+  }
   async function doSend(){
     const q=input.value.trim(); if(!q) return; input.value="";
     chat.appendChild(el(`<div class="msg user">${escapeHtml(q)}</div>`));
