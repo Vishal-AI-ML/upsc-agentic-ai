@@ -1,5 +1,6 @@
 """Core configuration - Pydantic Settings"""
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -118,6 +119,33 @@ class Settings(BaseSettings):
     verification_token_expire_minutes: int = 1440
     # Require email verification before login (strict). Set REQUIRE_EMAIL_VERIFICATION=false in .env to disable.
     require_email_verification: bool = True
+
+    @model_validator(mode="after")
+    def _normalize_env_values(self):
+        """Clean secrets/URLs pasted into hosting dashboards.
+
+        Hosting UIs (Render etc.) often capture surrounding quotes or stray
+        whitespace. Strip them so downstream clients (SQLAlchemy, psycopg,
+        Qdrant) receive valid values. Also upgrade the legacy ``postgres://``
+        scheme that SQLAlchemy 2.0 no longer accepts.
+        """
+        def _clean(value):
+            if isinstance(value, str):
+                return value.strip().strip('"').strip("'").strip()
+            return value
+
+        for field_name in (
+            "database_url", "qdrant_url", "qdrant_api_key",
+            "google_api_key", "groq_api_key", "tavily_api_key",
+            "jwt_secret", "langfuse_public_key", "langfuse_secret_key",
+            "langfuse_host", "embedding_model",
+        ):
+            setattr(self, field_name, _clean(getattr(self, field_name)))
+
+        if self.database_url.startswith("postgres://"):
+            self.database_url = "postgresql://" + self.database_url[len("postgres://") :]
+
+        return self
 
 
 @lru_cache
