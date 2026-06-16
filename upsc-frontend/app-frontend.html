@@ -181,6 +181,7 @@ function decodeJwt(t){
     return JSON.parse(decodeURIComponent(escape(atob(p)))); }catch(e){ return {}; }
 }
 function currentUser(){ return decodeJwt(token()); }
+function warmUpBackend(){ try{ fetch(apiBase().replace(/\/api\/v1\/?$/,"")+"/health",{method:"GET",cache:"no-store"}).catch(()=>{}); }catch(e){} }
 function extractVideoId(url){ if(!url) return ""; const m=url.match(/(?:v=|\/embed\/|youtu\.be\/|\/shorts\/|\/v\/)([A-Za-z0-9_-]{11})/); return m?m[1]:(/^[A-Za-z0-9_-]{11}$/.test(url.trim())?url.trim():""); }
 
 async function jget(path, params){
@@ -413,8 +414,9 @@ async function doReset(rtok){
 function streamInto(box, path, body, params, onDone){
   box.innerHTML=`<div class="muted"><span class="spin"></span> Generating… <span class="muted" style="font-size:12px">(AI speed depends on the model, not the UI)</span></div>`;
   let buf=""; let first=true;
-  streamPost(path, body, (chunk)=>{ if(first){ buf=""; first=false; } buf+=chunk; box.innerHTML=md(buf); }, params)
-    .then(()=>{ if(!buf.trim()) box.innerHTML=`<span class="muted">No response.</span>`; if(onDone)onDone(buf); });
+  const warm=setTimeout(()=>{ if(first) box.innerHTML=`<div class="muted"><span class="spin"></span> ⏳ Server warming up (free tier) — first request after idle can take ~30–50s…</div>`; }, 3500);
+  streamPost(path, body, (chunk)=>{ if(first){ buf=""; first=false; clearTimeout(warm); } buf+=chunk; box.innerHTML=md(buf); }, params)
+    .then(()=>{ clearTimeout(warm); if(!buf.trim()) box.innerHTML=`<span class="muted">No response.</span>`; if(onDone)onDone(buf); });
 }
 /* ---- History saving (POST /history/messages) + feedback (POST /feedback/submit) ---- */
 const CONV_IDS={};
@@ -447,7 +449,10 @@ function mountChat(container, agent, buildReq, opts){
     const bot=el(`<div class="msg bot"><span class="spin"></span></div>`); chat.appendChild(bot); bot.scrollIntoView({behavior:"smooth"});
     const req=buildReq(q, history.slice());
     let buf="",first=true;
-    await streamPost(req.path, req.body, (c)=>{ if(first){buf="";first=false;} buf+=c; bot.innerHTML=md(buf); chat.scrollTop=chat.scrollHeight; }, req.params);
+    const warm=setTimeout(()=>{ if(first) bot.innerHTML=`<span class="spin"></span> <span class="muted">⏳ Server warming up (free tier) — the first reply after idle can take ~30–50s…</span>`; }, 3500);
+    await streamPost(req.path, req.body, (c)=>{ if(first){buf="";first=false;clearTimeout(warm);} buf+=c; bot.innerHTML=md(buf); chat.scrollTop=chat.scrollHeight; }, req.params);
+    clearTimeout(warm);
+    if(first){ bot.innerHTML=`<span class="muted">No response.</span>`; }
     history.push({role:"user",content:q}); history.push({role:"assistant",content:buf});
     if(opts.save){ saveExchange(opts.save, q, buf); }
     if(opts.feedback){ addFeedback(bot, opts.save||agent, q, buf); }
@@ -497,7 +502,7 @@ function rHome(){
 function rMentor(){
   setView(`<h1 class="page">🧠 AI Mentor</h1><p class="lead">Strategy, doubt-clearing and roadmap. Volatile facts (dates/cut-offs) are grounded or flagged to verify at upsc.gov.in.</p><div class="card" id="mc"></div>`);
   mountChat($("#mc"), "mentor",
-    (q,hist)=>({path:"/agent/chat/stream", body:{question:q}}),
+    (q,hist)=>({path:"/mentor/chat", body:{question:q, chat_history:hist}}),
     {placeholder:"e.g. How do I start GS Polity from zero?", intro:"Hi, I'm your UPSC mentor. What would you like help with today?", save:"mentor", feedback:true});
 }
 
@@ -815,7 +820,7 @@ function boot(){
   if(vtok){ renderVerifyEmail(vtok); }
   else if(rtok){ renderResetPassword(rtok); }
   else if(!token() && !wantAuth){ window.location.replace("landing.html"); return; }
-  else { render(); }
+  else { warmUpBackend(); render(); }
   const sp=document.getElementById("splash");
   if(!sp) return;
   setTimeout(()=>{ sp.classList.add("gone"); setTimeout(()=>{ if(sp&&sp.remove) sp.remove(); }, 650); }, 1500);
