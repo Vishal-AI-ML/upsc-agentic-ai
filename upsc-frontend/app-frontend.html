@@ -166,7 +166,7 @@
 /* ============================================================
    CONFIG + API LAYER  (all endpoints match src/api routes)
    ============================================================ */
-const DEFAULT_API = "https://upsc-ai-pro.onrender.com/api/v1";
+const DEFAULT_API = "https://upsc-agentic-ai.onrender.com/api/v1";
 function apiBase(){ return localStorage.getItem("upscai-api") || DEFAULT_API; }
 function setApiBase(v){ localStorage.setItem("upscai-api", v.replace(/\/$/,"")); }
 function token(){ return localStorage.getItem("upscai-token") || ""; }
@@ -497,7 +497,7 @@ function rHome(){
 function rMentor(){
   setView(`<h1 class="page">🧠 AI Mentor</h1><p class="lead">Strategy, doubt-clearing and roadmap. Volatile facts (dates/cut-offs) are grounded or flagged to verify at upsc.gov.in.</p><div class="card" id="mc"></div>`);
   mountChat($("#mc"), "mentor",
-    (q,hist)=>({path:"/mentor/chat", body:{question:q, chat_history:hist}}),
+    (q,hist)=>({path:"/agent/chat/stream", body:{question:q}}),
     {placeholder:"e.g. How do I start GS Polity from zero?", intro:"Hi, I'm your UPSC mentor. What would you like help with today?", save:"mentor", feedback:true});
 }
 
