@@ -2,15 +2,18 @@
 Lecture routes - YouTube lecture processing
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 
 from src.models.schemas import (
-    LectureRequest, LectureResponse, LectureChatRequest
+    LectureRequest, LectureResponse, LectureChatRequest, LectureTextRequest
 )
 from src.agents.lecture.graph import (
-    process_lecture, ask_lecture, extract_video_id
+    process_lecture, ask_lecture, extract_video_id,
+    process_lecture_from_text, process_lecture_from_audio,
 )
+
+from src.core.config import settings
 
 router = APIRouter(prefix="/lecture", tags=["Lecture"])
 
@@ -28,6 +31,52 @@ async def process(request: LectureRequest):
             "notes": result["notes"],
             "topic_info": result["topic_info"],
             "video_id": video_id,
+            "mindmap_html": result.get("mindmap_html", ""),
+            "questions_html": result.get("questions_html", ""),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+
+@router.post("/process-text", response_model=LectureResponse)
+async def process_text(request: LectureTextRequest):
+    """Build lecture notes from a user-pasted transcript (no YouTube fetch)."""
+    try:
+        result = process_lecture_from_text(request.transcript, request.medium)
+        return {
+            "notes": result["notes"],
+            "topic_info": result["topic_info"],
+            "video_id": result["video_id"],
+            "mindmap_html": result.get("mindmap_html", ""),
+            "questions_html": result.get("questions_html", ""),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+
+@router.post("/process-audio", response_model=LectureResponse)
+async def process_audio(file: UploadFile = File(...), medium: str = Form("English")):
+    """Transcribe an uploaded audio file (Groq Whisper) and build notes.
+
+    Works for caption-less lectures and videos the server is blocked from.
+    """
+    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio file too large. Maximum allowed size is {settings.max_upload_mb} MB. Try a shorter clip or paste the transcript.",
+        )
+    try:
+        result = process_lecture_from_audio(content, file.filename or "audio.mp3", medium)
+        return {
+            "notes": result["notes"],
+            "topic_info": result["topic_info"],
+            "video_id": result["video_id"],
             "mindmap_html": result.get("mindmap_html", ""),
             "questions_html": result.get("questions_html", ""),
         }

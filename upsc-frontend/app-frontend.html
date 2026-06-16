@@ -594,27 +594,83 @@ async function rNcert(){
 
 /* ---- LECTURE ---- */
 function rLecture(){
-  setView(`<h1 class="page">🎥 Lecture AI</h1><p class="lead">Paste a YouTube lecture URL — get structured notes, then ask follow-up questions. (Needs an available transcript.)</p>
+  setView(`<h1 class="page">🎥 Lecture AI</h1><p class="lead">Get structured notes from any lecture, then ask follow-up questions. Use a YouTube link — or, if a video can’t be fetched, paste its transcript or upload the audio.</p>
   <div class="card">
-    <div class="row"><div style="flex:3"><label>YouTube URL</label><input id="lUrl" placeholder="https://www.youtube.com/watch?v=…"/></div>
-      <div><label>Notes language</label><select id="lMed"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div></div>
-    <div id="lThumb"></div><div style="height:12px"></div><button class="btn brand" id="lBtn">Process lecture</button>
+    <div class="subtabs" id="lSrc"><span class="subtab active" data-s="url">▶️ YouTube link</span><span class="subtab" data-s="paste">📋 Paste transcript</span><span class="subtab" data-s="audio">🎧 Upload audio</span></div>
+    <div class="row" style="margin-top:12px"><div><label>Notes language</label><select id="lMed"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div></div>
+    <div style="height:10px"></div>
+    <div id="lSrc_url">
+      <label>YouTube URL</label><input id="lUrl" placeholder="Paste a YouTube link (youtu.be/… or youtube.com/watch?v=…)"/>
+      <div id="lThumb"></div><div style="height:12px"></div>
+      <button class="btn brand" id="lBtn">Process lecture</button>
+    </div>
+    <div id="lSrc_paste" class="hidden">
+      <label>Paste the full lecture transcript</label>
+      <textarea id="lText" rows="8" style="width:100%;min-height:170px;font-family:inherit;font-size:14px" placeholder="Paste transcript here…  (On YouTube: open the video → ‘…more’ → ‘Show transcript’ → copy the text)"></textarea>
+      <div class="muted" style="font-size:12px;margin-top:6px">✅ Always works — this never contacts YouTube from our server.</div>
+      <div style="height:12px"></div>
+      <button class="btn brand" id="lTextBtn">Generate notes from transcript</button>
+    </div>
+    <div id="lSrc_audio" class="hidden">
+      <label>Upload lecture audio</label>
+      <input type="file" id="lAudio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.mp4"/>
+      <div class="muted" style="font-size:12px;margin-top:6px">🧠 We transcribe it with AI (Whisper) — works even when a video has no captions. Keep the file within the upload size limit; for very long lectures, paste the transcript instead.</div>
+      <div style="height:12px"></div>
+      <button class="btn brand" id="lAudioBtn">Transcribe &amp; generate notes</button>
+    </div>
     <div id="lResult"></div>
   </div>`);
-  $("#lUrl").addEventListener("input",()=>{ const vid=extractVideoId($("#lUrl").value.trim()); $("#lThumb").innerHTML = vid?('<div style="margin-top:10px;display:flex;gap:12px;align-items:center"><img src="https://img.youtube.com/vi/'+vid+'/mqdefault.jpg" style="width:120px;height:68px;border-radius:8px;object-fit:cover;border:1px solid var(--line)"/><div><span class="pill" style="color:var(--ok)">✅ Video detected</span><div class="muted" style="font-size:12px;margin-top:4px">ID: '+escapeHtml(vid)+'</div></div></div>'):""; });
+
+  // ---- source switcher ----
+  view().querySelectorAll("#lSrc .subtab").forEach(t=>t.addEventListener("click",()=>{
+    view().querySelectorAll("#lSrc .subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active");
+    ["url","paste","audio"].forEach(s=>{ const e=$("#lSrc_"+s); if(e) e.classList.toggle("hidden", s!==t.dataset.s); });
+  }));
+
+  // ---- URL detected indicator (text only, no external image) ----
+  $("#lUrl").addEventListener("input",()=>{ const vid=extractVideoId($("#lUrl").value.trim()); $("#lThumb").innerHTML = vid?('<div style="margin-top:10px"><span class="pill" style="color:var(--ok)">✅ Video detected</span> <span class="muted" style="font-size:12px">ID: '+escapeHtml(vid)+'</span></div>'):""; });
+
+  // ---- shared renderer (used by all three sources) ----
+  function renderLecture(d){
+    const R=$("#lResult");
+    const ti=d.topic_info||{}; let tiBanner="";
+    if(ti.topic && ti.topic!=="Unknown"){ tiBanner='<div class="card" style="margin-top:12px"><span class="pill">📌 '+escapeHtml(ti.topic||"")+'</span> <span class="pill">📋 '+escapeHtml(ti.paper||"")+'</span>'; if(ti.subtopics && ti.subtopics.length){ tiBanner+=' <span class="muted" style="font-size:12px">🔖 '+escapeHtml(ti.subtopics.join(", "))+'</span>'; } tiBanner+='</div>'; }
+    R.innerHTML=`${tiBanner}<div class="subtabs"><span class="subtab active" data-p="notes">📝 Notes</span>${d.mindmap_html?`<span class="subtab" data-p="mind">🧠 Mind map</span>`:""}${d.questions_html?`<span class="subtab" data-p="q">❓ Questions</span>`:""}<span class="subtab" data-p="chat">💬 Chat</span></div>
+      <div id="lP_notes" class="out">${md(d.notes)}</div><div id="lP_mind" class="hidden"></div><div id="lP_q" class="hidden"></div><div id="lP_chat" class="hidden card"></div>`;
+    if(d.mindmap_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_mind",R).appendChild(f); f.srcdoc=d.mindmap_html; }
+    if(d.questions_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_q",R).appendChild(f); f.srcdoc=d.questions_html; }
+    mountChat($("#lP_chat",R),"lecture",(q,hist)=>({path:"/lecture/chat",body:{question:q,video_id:d.video_id,topic_info:d.topic_info||{},chat_history:hist}}),{placeholder:"Ask about this lecture…",save:"lecture"});
+    R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); ["notes","mind","q","chat"].forEach(p=>{const e=$("#lP_"+p,R); if(e)e.classList.toggle("hidden",p!==t.dataset.p);}); }));
+  }
+
+  // ---- 1) YouTube URL flow ----
   $("#lBtn").addEventListener("click",async()=>{
-    const url=$("#lUrl").value.trim(); if(!url) return; const R=$("#lResult");
-    R.innerHTML=`<div class="out"><span class="spin"></span> Fetching transcript & building notes… (can take a bit)</div>`;
+    const url=$("#lUrl").value.trim(); if(!url){ return; } const R=$("#lResult");
+    R.innerHTML=`<div class="out"><span class="spin"></span> Fetching transcript &amp; building notes… (can take a bit)</div>`;
+    try{ const d=await jpost("/lecture/process",{youtube_url:url, medium:$("#lMed").value}); renderLecture(d); }
+    catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  });
+
+  // ---- 2) Paste-transcript flow (never touches YouTube) ----
+  $("#lTextBtn").addEventListener("click",async()=>{
+    const txt=$("#lText").value.trim(); const R=$("#lResult");
+    if(txt.length<200){ R.innerHTML=`<div class="out err">⚠️ Please paste a longer transcript (at least a few paragraphs of spoken content).</div>`; return; }
+    R.innerHTML=`<div class="out"><span class="spin"></span> Building notes from your transcript…</div>`;
+    try{ const d=await jpost("/lecture/process-text",{transcript:txt, medium:$("#lMed").value}); renderLecture(d); }
+    catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+  });
+
+  // ---- 3) Audio-upload flow (Groq Whisper) ----
+  $("#lAudioBtn").addEventListener("click",async()=>{
+    const f=$("#lAudio").files[0]; const R=$("#lResult");
+    if(!f){ R.innerHTML=`<div class="out err">⚠️ Please choose an audio file first.</div>`; return; }
+    R.innerHTML=`<div class="out"><span class="spin"></span> Transcribing audio &amp; building notes… (this can take a minute)</div>`;
     try{
-      const d=await jpost("/lecture/process",{youtube_url:url, medium:$("#lMed").value});
-      const ti=d.topic_info||{}; let tiBanner="";
-      if(ti.topic && ti.topic!=="Unknown"){ tiBanner='<div class="card" style="margin-top:12px"><span class="pill">📌 '+escapeHtml(ti.topic||"")+'</span> <span class="pill">📋 '+escapeHtml(ti.paper||"")+'</span>'; if(ti.subtopics && ti.subtopics.length){ tiBanner+=' <span class="muted" style="font-size:12px">🔖 '+escapeHtml(ti.subtopics.join(", "))+'</span>'; } tiBanner+='</div>'; }
-      R.innerHTML=`${tiBanner}<div class="subtabs"><span class="subtab active" data-p="notes">📝 Notes</span>${d.mindmap_html?`<span class="subtab" data-p="mind">🧠 Mind map</span>`:""}${d.questions_html?`<span class="subtab" data-p="q">❓ Questions</span>`:""}<span class="subtab" data-p="chat">💬 Chat</span></div>
-        <div id="lP_notes" class="out">${md(d.notes)}</div><div id="lP_mind" class="hidden"></div><div id="lP_q" class="hidden"></div><div id="lP_chat" class="hidden card"></div>`;
-      if(d.mindmap_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_mind",R).appendChild(f); f.srcdoc=d.mindmap_html; }
-      if(d.questions_html){ const f=el(`<iframe class="embed" sandbox="allow-scripts allow-same-origin"></iframe>`); $("#lP_q",R).appendChild(f); f.srcdoc=d.questions_html; }
-      mountChat($("#lP_chat",R),"lecture",(q,hist)=>({path:"/lecture/chat",body:{question:q,video_id:d.video_id,topic_info:d.topic_info||{},chat_history:hist}}),{placeholder:"Ask about this lecture…",save:"lecture"});
-      R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); ["notes","mind","q","chat"].forEach(p=>{const e=$("#lP_"+p,R); if(e)e.classList.toggle("hidden",p!==t.dataset.p);}); }));
+      const fd=new FormData(); fd.append("file", f, f.name); fd.append("medium", $("#lMed").value);
+      const resp=await fetch(apiUrl("/lecture/process-audio"),{method:"POST", headers:authHeaders(), body:fd});
+      let d={}; try{ d=await resp.json(); }catch(_){}
+      if(!resp.ok){ throw new Error((d&&d.detail)||("Audio processing failed (HTTP "+resp.status+")")); }
+      renderLecture(d);
     }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
   });
 }

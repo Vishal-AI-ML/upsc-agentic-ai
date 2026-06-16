@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
     groq_fast_model: str = "llama-3.1-8b-instant"
+    groq_whisper_model: str = "whisper-large-v3-turbo"  # Groq Speech-to-Text (audio -> text)
     enable_provider_fallback: bool = True
 
     # Embeddings

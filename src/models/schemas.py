@@ -112,6 +112,11 @@ class LectureResponse(BaseModel):
     questions_html: Optional[str] = ""
 
 
+class LectureTextRequest(BaseModel):
+    transcript: str = Field(..., min_length=1, description="Pasted lecture transcript text")
+    medium: str = Field("English", description="Notes output language: English / Hindi / Hinglish")
+
+
 class LectureChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
     video_id: str

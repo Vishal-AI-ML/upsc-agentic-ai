@@ -236,39 +236,30 @@ def _detect_topic(text: str) -> dict:
 # MAIN PROCESSING
 # ─────────────────────────────────────────
 
-def process_lecture(youtube_url: str, medium: str = "English") -> dict:
-    """Process YouTube lecture and generate notes."""
-    video_id = extract_video_id(youtube_url)
-    if not video_id:
-        raise ValueError("🔗 This doesn’t look like a valid YouTube link. Please paste a full YouTube video URL and try again.")
-    
-    # Get transcript
-    transcript, lang = get_transcript(video_id)
-
-    # Content floor - a tiny transcript means no real teaching content (e.g. a
-    # short announcement/news clip). Tune MIN_TRANSCRIPT_CHARS if needed.
+def _build_from_transcript(transcript: str, lang: str, video_id: str, medium: str = "English") -> dict:
+    """Shared pipeline: turn a raw transcript into notes, study aids and a RAG
+    vector store. Used by the YouTube-caption, pasted-transcript and uploaded-
+    audio entry points so all three behave identically downstream."""
+    # Content floor - too little text means there is no real teaching content.
     MIN_TRANSCRIPT_CHARS = 2000
     if not transcript or len(transcript.strip()) < MIN_TRANSCRIPT_CHARS:
         raise ValueError(
-            "📝 This video is too short to create proper notes - it does not have enough spoken lecture content. Please share a full teaching lecture and we will prepare your notes."
+            "📝 There isn’t enough lecture content here to build proper "
+            "notes. Please provide a fuller lecture - a complete transcript, or "
+            "the full audio of a teaching session."
         )
-    
-    # No bulk translation - Gemini reads Hindi/English directly. Translating
-    # the full transcript was the biggest cost driver on long videos and is
+
+    # No bulk translation - Gemini reads Hindi/English directly. Translating the
+    # full transcript was the biggest cost driver on long videos and is
     # unnecessary since the model is multilingual.
     english_text = transcript
     logger.info(f"Skipping bulk translation (lang={lang}) - using transcript directly")
-    
+
     # Detect topic
     topic_info = _detect_topic(english_text)
     logger.info(f"Topic: {topic_info['topic']} | Paper: {topic_info['paper']}")
 
     # Relevance gate - only allow genuine TEACHING lectures.
-    # Layer 1: genre classification (entertainment / motivational / news / other -> rejected).
-    # Layer 2: deterministic backstop - a real focused lecture maps to ONE paper; if the
-    #          classifier tagged many papers at once, or "Not Applicable", it is almost
-    #          certainly an overview/anecdotal video (e.g. a comedy take on the exam),
-    #          not a teaching lecture.
     content_type = (topic_info.get("content_type") or "teaching").strip().lower()
     paper_raw = (topic_info.get("paper") or "").lower()
     non_teaching = (content_type in {"entertainment", "motivational", "news_update", "news", "other"}) or (not topic_info.get("relevant", True))
@@ -281,27 +272,26 @@ def process_lecture(youtube_url: str, medium: str = "English") -> dict:
             f"paper='{topic_info.get('paper')}', multi_paper={multi_paper}, na_paper={na_paper}"
         )
         raise ValueError(
-            "🎬 This doesn’t look like a genuine teaching lecture — it seems to be entertainment, "
-            "a personal/anecdotal story, a motivational talk, or just an announcement (even if it "
-            "mentions UPSC). UPSC AI is built for study lectures that actually teach the syllabus, "
-            "so we couldn’t create notes from it. Please share an educational lecture that explains "
-            "a topic and we’ll prepare your notes."
+            "🎬 This doesn’t look like a genuine teaching lecture - it seems to be "
+            "entertainment, a personal/anecdotal story, a motivational talk, or just an "
+            "announcement (even if it mentions UPSC). UPSC AI is built for study lectures that "
+            "actually teach the syllabus, so we couldn’t create notes from it. Please share "
+            "an educational lecture that explains a topic and we’ll prepare your notes."
         )
-    
+
     # Smart truncation for notes
     max_chars = 14000
     if len(english_text) > max_chars:
         mid_start = len(english_text) // 2 - 1000
+        sep = chr(10) + chr(10) + "[...]" + chr(10) + chr(10)
         text_for_notes = (
-            english_text[:8000] +
-            "\n\n[...]\n\n" +
-            english_text[mid_start:mid_start + 2000] +
-            "\n\n[...]\n\n" +
+            english_text[:8000] + sep +
+            english_text[mid_start:mid_start + 2000] + sep +
             english_text[-2000:]
         )
     else:
         text_for_notes = english_text
-    
+
     # Generate notes
     try:
         chain = NOTES_PROMPT | get_llm()
@@ -318,11 +308,11 @@ def process_lecture(youtube_url: str, medium: str = "English") -> dict:
 
     if notes and not notes.startswith("⚠️"):
         notes = "> ⚠️ AI-generated notes - cross-check key facts, dates, and names with a standard source." + chr(10) + chr(10) + notes
-    
+
     # Create vector store for chat
     key = make_persist_key("lecture", video_id)
     create_vector_store(english_text, persist_key=key)
-    
+
     # Generate study aids (mind map + practice questions) - skip when notes failed
     if notes and not notes.startswith("⚠️"):
         from src.core.study_aids import generate_study_aids
@@ -337,7 +327,112 @@ def process_lecture(youtube_url: str, medium: str = "English") -> dict:
         "mindmap_html": mindmap_html,
         "questions_html": questions_html,
         "topic_info": topic_info,
+        "video_id": video_id,
     }
+
+
+def process_lecture(youtube_url: str, medium: str = "English") -> dict:
+    """Process a YouTube lecture via its captions and generate notes."""
+    video_id = extract_video_id(youtube_url)
+    if not video_id:
+        raise ValueError("🔗 This doesn’t look like a valid YouTube link. Please paste a full YouTube video URL and try again.")
+    transcript, lang = get_transcript(video_id)
+    return _build_from_transcript(transcript, lang, video_id, medium)
+
+
+# -----------------------------------------------------------------
+# ALTERNATIVE INPUTS - pasted transcript & uploaded audio (Groq Whisper)
+#
+# These bypass YouTube's server-side caption fetch entirely, which shared
+# cloud hosts (e.g. Render) are frequently IP-blocked from. They also unlock
+# lectures that have no captions at all.
+# -----------------------------------------------------------------
+
+import hashlib as _hashlib
+
+# Groq exposes an OpenAI-compatible Speech-to-Text endpoint. Assembled from
+# fragments so URL-rewriting tooling never mangles a full literal.
+_GROQ_STT_URL = "https://" + "api.groq.com/openai/v1/audio/transcriptions"
+
+
+def transcribe_audio_groq(audio_bytes: bytes, filename: str = "audio.mp3") -> str:
+    """Transcribe an audio file to text using Groq's Whisper endpoint.
+
+    Returns plain transcript text, or raises ValueError with a user-friendly
+    message (missing key, oversized/unsupported file, rate limit, etc.).
+    """
+    from src.core.config import settings
+    if not settings.groq_api_key:
+        raise ValueError(
+            "🔑 Audio transcription needs a Groq API key on the server. "
+            "Please paste the transcript instead, or ask the admin to set GROQ_API_KEY."
+        )
+    model = getattr(settings, "groq_whisper_model", "whisper-large-v3-turbo")
+    try:
+        resp = requests.post(
+            _GROQ_STT_URL,
+            headers={"Authorization": "Bearer " + settings.groq_api_key},
+            files={"file": (filename or "audio.mp3", audio_bytes)},
+            data={"model": model, "response_format": "text"},
+            timeout=300,
+        )
+    except Exception as e:
+        logger.error(f"Groq STT request failed: {e}")
+        raise ValueError(
+            "⚠️ We couldn’t reach the transcription service just now. Please "
+            "try again in a moment, or paste the transcript instead."
+        )
+    if resp.status_code != 200:
+        snippet = (resp.text or "")[:300]
+        low = snippet.lower()
+        logger.error(f"Groq STT HTTP {resp.status_code}: {snippet}")
+        if resp.status_code == 429:
+            raise ValueError(
+                "⏳ Transcription is rate-limited right now. Please try again in a "
+                "little while, or paste the transcript instead."
+            )
+        if resp.status_code in (400, 413) and ("large" in low or "size" in low or "decode" in low or "format" in low):
+            raise ValueError(
+                "🎧 This audio looks too large or is in an unsupported format. "
+                "Please upload a shorter clip as MP3/M4A/WAV, or paste the transcript instead."
+            )
+        raise ValueError(
+            "⚠️ Audio transcription failed. Please try a different file, or "
+            "paste the transcript instead."
+        )
+    text = (resp.text or "").strip()
+    if not text:
+        raise ValueError(
+            "🎧 We couldn’t hear any speech in that audio. Please upload a "
+            "clear lecture recording, or paste the transcript instead."
+        )
+    return text
+
+
+def process_lecture_from_text(transcript: str, medium: str = "English") -> dict:
+    """Build a lecture study session from a user-pasted transcript.
+
+    This path never touches YouTube, so it always works regardless of caption
+    availability or server IP blocks.
+    """
+    if not transcript or not transcript.strip():
+        raise ValueError("📝 Please paste the lecture transcript text first.")
+    vid = "paste_" + _hashlib.md5(transcript.strip().encode("utf-8")).hexdigest()[:11]
+    return _build_from_transcript(transcript, "auto", vid, medium)
+
+
+def process_lecture_from_audio(audio_bytes: bytes, filename: str = "audio.mp3", medium: str = "English") -> dict:
+    """Transcribe an uploaded audio file (Groq Whisper) and build notes.
+
+    Works for lectures with no captions and for videos the server is blocked
+    from, because the user supplies the audio directly.
+    """
+    if not audio_bytes:
+        raise ValueError("🎧 The uploaded audio file appears to be empty.")
+    transcript = transcribe_audio_groq(audio_bytes, filename)
+    vid = "audio_" + _hashlib.md5(audio_bytes).hexdigest()[:11]
+    return _build_from_transcript(transcript, "auto", vid, medium)
+
 
 
 # ─────────────────────────────────────────
