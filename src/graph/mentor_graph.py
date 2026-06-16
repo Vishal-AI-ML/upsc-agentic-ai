@@ -69,7 +69,10 @@ class IntentDecision(BaseModel):
 _ROUTER_SYS = (
     "You route messages for a UPSC mentor named Arjun. Classify the student's "
     "message into exactly one intent and decide whether a live web search is "
-    "needed. Set needs_web_search to True ONLY for volatile/current facts "
+    "needed. Treat capability/meta questions (e.g. 'what can you do', 'how can "
+    "you help me') and simple factual questions (e.g. today's date) as 'casual'. "
+    "Use 'vague' only when an academic request is genuinely unclear. "
+    "Set needs_web_search to True ONLY for volatile/current facts "
     "(exam dates, notifications, results, cut-offs, vacancies, recent news)."
 )
 
@@ -148,7 +151,7 @@ def generate_node(state: AgentState) -> dict:
         )
     elif intent == "vague":
         chain = VAGUE_PROMPT | llm
-        resp = chain.invoke({"question": question})
+        resp = chain.invoke({"question": question, "current_date": current_date})
     elif intent == "emotional":
         chain = EMOTIONAL_PROMPT | llm
         resp = chain.invoke({"question": question, "current_date": current_date})
