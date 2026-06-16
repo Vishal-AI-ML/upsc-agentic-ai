@@ -15,7 +15,13 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_db_url = settings.database_url or "sqlite:///./upsc_app.db"
+# Normalize the URL so it survives copy/paste into host dashboards (Render etc.):
+#   * strip stray whitespace and surrounding quotes
+#   * upgrade the legacy "postgres://" scheme that SQLAlchemy 2.0 no longer accepts
+_raw_db_url = (settings.database_url or "").strip().strip('"').strip("'")
+if _raw_db_url.startswith("postgres://"):
+    _raw_db_url = "postgresql://" + _raw_db_url[len("postgres://") :]
+_db_url = _raw_db_url or "sqlite:///./upsc_app.db"
 
 # SQLite needs check_same_thread=False to work with FastAPI's threadpool.
 _connect_args = {"check_same_thread": False} if _db_url.startswith("sqlite") else {}
