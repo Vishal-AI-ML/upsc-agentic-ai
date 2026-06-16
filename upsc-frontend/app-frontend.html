@@ -436,6 +436,7 @@ function addFeedback(botEl,agent,q,ans){
   botEl.appendChild(bar);
 }
 /* Generic chat: sendFn(question, historyArr) -> {path, body, params} */
+function routeBadge(route){ const map={casual:["🧠","Mentor"],vague:["🧠","Mentor"],emotional:["🫂","Mentor · Support"],mentor:["🧠","Mentor"],grounded:["📚","Grounded"],web:["🌐","Live web"],"grounded+web":["📚🌐","Grounded + Web"]}; const r=map[route]||map.mentor; const c=(route==="grounded"||route==="grounded+web")?"#00b894":(route==="web"?"#0984e3":(route==="emotional"?"#e17055":"#6c5ce7")); return `<span class="route-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:${c}22;color:${c};margin-bottom:6px">${r[0]} ${r[1]}</span>`; }
 function mountChat(container, agent, buildReq, opts){
   opts=opts||{};
   let history=[];
@@ -458,9 +459,10 @@ function mountChat(container, agent, buildReq, opts){
     chat.appendChild(el(`<div class="msg user">${escapeHtml(q)}</div>`));
     const bot=el(`<div class="msg bot"><span class="spin"></span></div>`); chat.appendChild(bot); bot.scrollIntoView({behavior:"smooth"});
     const req=buildReq(q, history.slice());
-    let buf="",first=true;
+    let buf="",first=true,badge="",routeDone=false;
     const warm=setTimeout(()=>{ if(first) bot.innerHTML=`<span class="spin"></span> <span class="muted">⏳ Server warming up (free tier) — the first reply after idle can take ~30–50s…</span>`; }, 3500);
-    await streamPost(req.path, req.body, (c)=>{ if(first){buf="";first=false;clearTimeout(warm);} buf+=c; bot.innerHTML=md(buf); chat.scrollTop=chat.scrollHeight; }, req.params);
+    function _render(){ bot.innerHTML=(badge?`<div>${badge}</div>`:"")+md(buf); chat.scrollTop=chat.scrollHeight; }
+    await streamPost(req.path, req.body, (c)=>{ if(first){buf="";first=false;clearTimeout(warm);} buf+=c; if(!routeDone){ const m=buf.match(/^\x1fR:([^\x1f]*)\x1f/); if(m){ routeDone=true; badge=routeBadge(m[1]); buf=buf.slice(m[0].length); } else if(buf.length>0 && buf.charCodeAt(0)!==31){ routeDone=true; } else { return; } } _render(); }, req.params);
     clearTimeout(warm);
     if(first){ bot.innerHTML=`<span class="muted">No response.</span>`; }
     history.push({role:"user",content:q}); history.push({role:"assistant",content:buf});

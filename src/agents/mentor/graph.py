@@ -238,6 +238,7 @@ def mentor_reply(
     if _is_casual(question):
         try:
             latest_news = _fetch_latest_upsc_news()
+            yield "\x1fR:casual\x1f"
             chain = CASUAL_PROMPT | llm
             for chunk in chain.stream({
                 "question": question,
@@ -254,6 +255,7 @@ def mentor_reply(
     # ── Vague ──
     if _is_vague(question):
         try:
+            yield "\x1fR:vague\x1f"
             chain = VAGUE_PROMPT | llm
             for chunk in chain.stream({"question": question}):
                 if hasattr(chunk, "content"):
@@ -266,6 +268,7 @@ def mentor_reply(
     # ── Emotional ──
     if _is_emotional(question):
         try:
+            yield "\x1fR:emotional\x1f"
             chain = EMOTIONAL_PROMPT | llm
             for chunk in chain.stream({
                 "question": question,
@@ -298,6 +301,10 @@ def mentor_reply(
             logger.info(f"Live search injected for: {question[:60]}")
 
     try:
+        _grounded = kb_context != "No matching background knowledge."
+        _web = bool(search_results)
+        _route = "grounded+web" if (_grounded and _web) else ("grounded" if _grounded else ("web" if _web else "mentor"))
+        yield "\x1fR:" + _route + "\x1f"
         chain = MENTOR_PROMPT | llm
         for chunk in chain.stream({
             "question": question,
