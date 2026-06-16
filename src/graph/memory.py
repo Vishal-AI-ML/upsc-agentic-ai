@@ -38,6 +38,39 @@ def _is_postgres(url: str) -> bool:
     return url.startswith("postgres://") or url.startswith("postgresql://")
 
 
+# Single shared connection pool for BOTH the checkpointer and the store.
+# Managed poolers (e.g. Supabase free tier / pgBouncer) allow only a handful of
+# concurrent connections. Opening one pool per layer (20 + 10) exhausts that
+# budget and the second layer times out. A single small pool keeps total usage
+# low so both layers stay durable on Postgres.
+_pg_pool = None
+
+
+def _get_shared_pg_pool(url: str):
+    """Return a process-wide psycopg connection pool, created lazily.
+
+    Shared by the checkpointer and the store. Conservatively sized so the app
+    stays well under the connection ceiling of managed poolers.
+    """
+    global _pg_pool
+    if _pg_pool is not None:
+        return _pg_pool
+    from psycopg_pool import ConnectionPool
+
+    pool = ConnectionPool(
+        conninfo=url,
+        min_size=1,
+        max_size=5,
+        timeout=10,
+        kwargs=_PG_KWARGS,
+        open=False,
+    )
+    pool.open(wait=True, timeout=15)
+    _pools.append(pool)
+    _pg_pool = pool
+    return _pg_pool
+
+
 # ============================ Checkpointer (short-term) ========================
 def get_checkpointer():
     """Return a process-wide checkpointer, creating it on first use.
@@ -55,10 +88,8 @@ def get_checkpointer():
     if _is_postgres(url):
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
-            from psycopg_pool import ConnectionPool
 
-            pool = ConnectionPool(conninfo=url, max_size=20, kwargs=_PG_KWARGS, open=True)
-            _pools.append(pool)
+            pool = _get_shared_pg_pool(url)
             checkpointer = PostgresSaver(pool)
             checkpointer.setup()  # creates checkpoint tables if missing
             logger.info("Checkpointer: Postgres (shared DATABASE_URL)")
@@ -99,10 +130,8 @@ def get_store():
     if _is_postgres(url):
         try:
             from langgraph.store.postgres import PostgresStore
-            from psycopg_pool import ConnectionPool
 
-            pool = ConnectionPool(conninfo=url, max_size=10, kwargs=_PG_KWARGS, open=True)
-            _pools.append(pool)
+            pool = _get_shared_pg_pool(url)
             store = PostgresStore(pool)
             store.setup()  # creates store tables if missing
             logger.info("Store: Postgres (shared DATABASE_URL)")
