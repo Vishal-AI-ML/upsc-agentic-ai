@@ -208,23 +208,15 @@ def ask_upload(
         yield "Please ask a specific question about the document."
         return
     
-    # Load vector store
-    from src.core.vector_store import get_embeddings
-    from langchain_chroma import Chroma
-    from src.core.config import settings
-    
+    # Load vector store (Qdrant in prod, local Chroma fallback)
+    from src.core.vector_store import load_vector_store
+
     key = make_persist_key("upload", pdf_hash)
-    persist_dir = persist_dir_for(key)
-    
-    if not os.path.exists(persist_dir):
+    db = load_vector_store(key)
+    if db is None:
         yield "Please upload and process the PDF first."
         return
-    
-    db = Chroma(
-        persist_directory=persist_dir,
-        embedding_function=get_embeddings(),
-    )
-    
+
     ctx = similarity_search(db, question.strip(), k=5, label="upload")
     if not ctx:
         yield "Could not find relevant content. Try rephrasing your question."

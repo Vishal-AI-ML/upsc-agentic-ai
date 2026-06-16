@@ -1,7 +1,7 @@
 """
 Mentor Knowledge Base - grounded, citeable knowledge for the Mentor agent.
 
-One persistent Chroma store ("mentor_kb") holding DURABLE, slow-changing knowledge:
+One persistent vector store ("mentor_kb") holding DURABLE, slow-changing knowledge:
   - Verified UPSC facts (exam pattern, eligibility, syllabus) from a curated, DATED
     markdown file.
   - Topper strategies from YouTube interview transcripts (attributed to topper + year).
@@ -12,21 +12,24 @@ here - the Mentor agent fetches those live from official sources. This KB only h
 knowledge that stays valid for a long time, and every chunk carries a 'source' label
 so the Mentor can cite it to the user.
 
+Backend follows src.core.vector_store (Qdrant in prod, local Chroma fallback).
+
 Rebuild whenever the facts file changes or topper videos are added:
     python scripts/ingest_mentor_kb.py
 """
 import os
-import shutil
 import logging
 from typing import Optional
 
-from langchain_chroma import Chroma
-
 from src.core.vector_store import (
-    get_embeddings,
+    _use_qdrant,
+    collection_for,
     get_text_splitter,
-    persist_dir_for,
+    load_vector_store,
     make_persist_key,
+    persist_dir_for,
+    upsert_documents,
+    vector_store_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,14 +40,22 @@ KB_KEY = make_persist_key("mentor", "kb")
 KB_THRESHOLD = float(os.getenv("MENTOR_KB_THRESHOLD", "0.25"))
 
 
+def kb_location() -> str:
+    """Human-readable location of the mentor KB (Qdrant collection or on-disk dir)."""
+    return (
+        f"qdrant:{collection_for(KB_KEY)}" if _use_qdrant() else persist_dir_for(KB_KEY)
+    )
+
+
+# Backwards-compatible alias kept for the ingest script's logging.
 def kb_dir() -> str:
-    """Canonical on-disk Chroma dir for the mentor KB."""
-    return persist_dir_for(KB_KEY)
+    """Deprecated name for kb_location(); retained so callers do not break."""
+    return kb_location()
 
 
 def kb_exists() -> bool:
-    d = kb_dir()
-    return os.path.isdir(d) and bool(os.listdir(d))
+    """True if the mentor KB has been built and holds at least one chunk."""
+    return vector_store_exists(KB_KEY)
 
 
 def _make_docs(sources):
@@ -56,7 +67,7 @@ def _make_docs(sources):
         if not text:
             continue
         md = dict(s.get("metadata") or {})
-        # Chroma metadata values must be str/int/float/bool (no None).
+        # Keep metadata values primitive (str/int/float/bool); drop None.
         md = {k: v for k, v in md.items() if v is not None}
         docs.extend(splitter.create_documents([text], metadatas=[md]))
     return docs
@@ -72,13 +83,8 @@ def build_kb(sources, rebuild: bool = True) -> int:
     if not docs:
         logger.warning("Mentor KB: no documents to index (nothing ingested)")
         return 0
-    d = kb_dir()
-    if rebuild and os.path.isdir(d):
-        logger.info(f"Mentor KB: clearing existing store at {d}")
-        shutil.rmtree(d, ignore_errors=True)
-    os.makedirs(d, exist_ok=True)
-    Chroma.from_documents(docs, get_embeddings(), persist_directory=d)
-    logger.info(f"Mentor KB built: {len(docs)} chunks -> {d}")
+    upsert_documents(KB_KEY, docs, rebuild=rebuild)
+    logger.info(f"Mentor KB built: {len(docs)} chunks -> {kb_location()}")
     return len(docs)
 
 
@@ -95,8 +101,10 @@ def search_kb(query: str, k: int = 4, min_score: Optional[float] = None) -> dict
     if not q or not kb_exists():
         return {"context": "", "citations": [], "grounded": False}
     threshold = KB_THRESHOLD if min_score is None else min_score
+    db = load_vector_store(KB_KEY)
+    if db is None:
+        return {"context": "", "citations": [], "grounded": False}
     try:
-        db = Chroma(persist_directory=kb_dir(), embedding_function=get_embeddings())
         scored = db.similarity_search_with_relevance_scores(q, k=k)
     except Exception as e:
         logger.warning(f"Mentor KB search failed: {e}")

@@ -3,7 +3,11 @@
 #
 # Deploy: push this file to your repo root, then in Render -> "New +" ->
 # "Blueprint" -> pick the repo. Render reads this file and provisions the
-# service + persistent disk automatically.
+# service automatically.
+#
+# Vectors now live in Qdrant (managed), so NO persistent disk is needed and the
+# service runs on the FREE plan. The app is stateless: embeddings are in Qdrant,
+# all user/auth/history data is in Supabase Postgres.
 #
 # Secrets (sync: false) are NOT stored in this file. Set them once in the
 # Render dashboard (Environment tab). Never commit real keys.
@@ -12,7 +16,7 @@ services:
   - type: web
     name: upsc-agentic-ai
     runtime: python
-    plan: starter            # persistent disks require a paid instance (starter+)
+    plan: free               # no disk needed -> free plan works (sleeps on idle)
     region: singapore        # keep close to your Supabase region (ap-southeast-1)
     branch: main
 
@@ -25,20 +29,16 @@ services:
     # Render pings this to decide if a deploy is healthy.
     healthCheckPath: /health
 
-    # Persistent disk so the Chroma vector store survives restarts/deploys.
-    disk:
-      name: chroma-data
-      mountPath: /var/data
-      sizeGB: 1
-
     envVars:
       # ----- Runtime -----
       - key: PYTHON_VERSION
         value: "3.13.13"
 
-      # ----- Vector store (points at the mounted disk above) -----
-      - key: CHROMA_PERSIST_DIR
-        value: /var/data/chroma_db
+      # ----- Vector store: Qdrant (managed). No disk required. -----
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
       - key: SIMILARITY_THRESHOLD
         value: "0.3"
       - key: MENTOR_KB_THRESHOLD

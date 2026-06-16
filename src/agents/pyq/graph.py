@@ -385,27 +385,17 @@ def _bank_key(user_id: str) -> str:
 def build_question_bank(file_content: bytes, filename: str, user_id: str) -> dict:
     """Extract text from an uploaded PYQ PDF and add it to the user's personal bank."""
     from src.agents.upload.graph import extract_pdf_text
-    from src.core.vector_store import (
-        get_embeddings, get_text_splitter, persist_dir_for,
-    )
-    from langchain_chroma import Chroma
+    from src.core.vector_store import get_text_splitter, upsert_documents
 
     text, pdf_hash = extract_pdf_text(file_content, filename)
-    persist_dir = persist_dir_for(_bank_key(user_id))
-    embeddings = get_embeddings()
 
     docs = get_text_splitter().create_documents([text])
     for d in docs:
         d.metadata = {"source": filename, "pdf_hash": pdf_hash}
 
-    if os.path.exists(persist_dir):
-        db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
-        db.add_documents(docs)
-        logger.info(f"PYQ bank: added {len(docs)} chunks from {filename} (user={user_id})")
-    else:
-        os.makedirs(persist_dir, exist_ok=True)
-        Chroma.from_documents(docs, embeddings, persist_directory=persist_dir)
-        logger.info(f"PYQ bank: created with {len(docs)} chunks from {filename} (user={user_id})")
+    # Append to the user's bank collection (auto-created on first upload).
+    upsert_documents(_bank_key(user_id), docs, rebuild=False)
+    logger.info(f"PYQ bank: added {len(docs)} chunks from {filename} (user={user_id})")
 
     approx_q = len(_QHEAD_RE.findall(text))
     return {
@@ -418,15 +408,25 @@ def build_question_bank(file_content: bytes, filename: str, user_id: str) -> dic
 
 def get_bank_status(user_id: str) -> dict:
     """Whether the user has a personal PYQ bank yet."""
-    from src.core.vector_store import persist_dir_for
-    return {"exists": os.path.exists(persist_dir_for(_bank_key(user_id)))}
+    from src.core.vector_store import vector_store_exists
+    return {"exists": vector_store_exists(_bank_key(user_id))}
 
 
 def clear_bank(user_id: str) -> dict:
-    """Delete the user's personal PYQ bank."""
+    """Delete the user's personal PYQ bank (Qdrant collection or local Chroma dir)."""
+    from src.core.vector_store import _use_qdrant, collection_for, persist_dir_for
+    key = _bank_key(user_id)
+    if _use_qdrant():
+        from src.core.vector_store import get_qdrant_client
+        client = get_qdrant_client()
+        name = collection_for(key)
+        existed = client.collection_exists(name)
+        if existed:
+            client.delete_collection(name)
+            logger.info(f"PYQ bank cleared (user={user_id}, collection={name})")
+        return {"cleared": existed}
     import shutil
-    from src.core.vector_store import persist_dir_for
-    persist_dir = persist_dir_for(_bank_key(user_id))
+    persist_dir = persist_dir_for(key)
     existed = os.path.exists(persist_dir)
     if existed:
         shutil.rmtree(persist_dir, ignore_errors=True)
@@ -455,16 +455,14 @@ def _generate_grounded(
     Loads the given vector store, pulls relevant context, and streams self-checked
     questions built ONLY from that context - so output stays grounded on the source.
     """
-    from src.core.vector_store import get_embeddings, persist_dir_for, similarity_search
-    from langchain_chroma import Chroma
+    from src.core.vector_store import load_vector_store, similarity_search, vector_store_exists
 
-    persist_dir = persist_dir_for(persist_key)
-    if not os.path.exists(persist_dir):
+    if not vector_store_exists(persist_key):
         yield "> \U0001F4ED " + empty_msg + chr(10)
         return
 
     try:
-        db = Chroma(persist_directory=persist_dir, embedding_function=get_embeddings())
+        db = load_vector_store(persist_key)
     except Exception as e:
         logger.error(f"Grounded gen load failed ({label}): {e}")
         yield "> \u26A0\uFE0F " + open_fail_msg + chr(10)

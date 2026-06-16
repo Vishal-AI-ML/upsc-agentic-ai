@@ -187,22 +187,15 @@ def ask_ncert(
         yield "Please ask a specific question about the chapter."
         return
     
-    # Load vector store
+    # Load vector store (Qdrant in prod, local Chroma fallback)
     key = make_persist_key("ncert", class_name, subject, chapter)
-    from src.core.vector_store import get_embeddings
-    from langchain_chroma import Chroma
-    from src.core.config import settings
-    
-    persist_dir = persist_dir_for(key)
-    if not os.path.exists(persist_dir):
+    from src.core.vector_store import load_vector_store
+
+    db = load_vector_store(key)
+    if db is None:
         yield "Please generate study session first before chatting."
         return
-    
-    db = Chroma(
-        persist_directory=persist_dir,
-        embedding_function=get_embeddings(),
-    )
-    
+
     ctx = similarity_search(db, question.strip(), k=5, label="ncert")
     if not ctx:
         yield "Could not find relevant content in this chapter. Try rephrasing your question."

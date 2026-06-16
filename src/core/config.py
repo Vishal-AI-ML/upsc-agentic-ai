@@ -38,10 +38,22 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_model: str = "models/gemini-embedding-001"
 
-    # Vector Store
+    # Vector Store (Chroma = local dev fallback; Qdrant = production/cloud)
     chroma_persist_dir: str = "chroma_db"
     chunk_size: int = 1000
     chunk_overlap: int = 150
+
+    # Qdrant managed vector DB. Empty qdrant_url => automatically falls back to
+    # local Chroma (so local dev keeps working without Qdrant).
+    #   Cloud free cluster:
+    #     QDRANT_URL=https://<id>.<region>.aws.cloud.qdrant.io:6333
+    #     QDRANT_API_KEY=<your-api-key>
+    #   Self-hosted later (e.g. Oracle VM): QDRANT_URL=http://localhost:6333
+    #     (api key optional for a private self-hosted instance)
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    # Network timeout (seconds) for Qdrant client operations.
+    qdrant_timeout: int = 30
 
     # NCERT content library (folder of class/subject/chapter PDFs).
     # Empty/missing => NCERT browse shows no content (app still runs, no crash).

@@ -310,24 +310,15 @@ def ask_lecture(
         yield "Please ask a specific question about the lecture."
         return
     
-    # Load vector store
-    import os
-    from src.core.vector_store import get_embeddings
-    from langchain_chroma import Chroma
-    from src.core.config import settings
-    
+    # Load vector store (Qdrant in prod, local Chroma fallback)
+    from src.core.vector_store import load_vector_store
+
     key = make_persist_key("lecture", video_id)
-    persist_dir = persist_dir_for(key)
-    
-    if not os.path.exists(persist_dir):
+    db = load_vector_store(key)
+    if db is None:
         yield "Please process the lecture first before chatting."
         return
-    
-    db = Chroma(
-        persist_directory=persist_dir,
-        embedding_function=get_embeddings(),
-    )
-    
+
     ctx = similarity_search(db, question.strip(), k=5, label="lecture")
     if not ctx:
         yield "Could not find relevant content in this lecture. Try rephrasing."
