@@ -594,43 +594,22 @@ async function rNcert(){
 
 /* ---- LECTURE ---- */
 function rLecture(){
-  setView(`<h1 class="page">🎥 Lecture AI</h1><p class="lead">Get structured notes from any lecture, then ask follow-up questions. Use a YouTube link — or, if a video can’t be fetched, paste its transcript or upload the audio.</p>
+  setView(`<h1 class="page">🎥 Lecture AI</h1><p class="lead">Paste any YouTube lecture link and get structured notes, then ask follow-up questions. If a video can’t be fetched on our server, we’ll capture its audio right in your browser — free &amp; private — and still build your notes.</p>
   <div class="card">
-    <div class="subtabs" id="lSrc"><span class="subtab active" data-s="url">▶️ YouTube link</span><span class="subtab" data-s="paste">📋 Paste transcript</span><span class="subtab" data-s="audio">🎧 Upload audio</span></div>
-    <div class="row" style="margin-top:12px"><div><label>Notes language</label><select id="lMed"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div></div>
+    <div class="row"><div><label>Notes language</label><select id="lMed"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div></div>
     <div style="height:10px"></div>
-    <div id="lSrc_url">
-      <label>YouTube URL</label><input id="lUrl" placeholder="Paste a YouTube link (youtu.be/… or youtube.com/watch?v=…)"/>
-      <div id="lThumb"></div><div style="height:12px"></div>
-      <button class="btn brand" id="lBtn">Process lecture</button>
-    </div>
-    <div id="lSrc_paste" class="hidden">
-      <label>Paste the full lecture transcript</label>
-      <textarea id="lText" rows="8" style="width:100%;min-height:170px;font-family:inherit;font-size:14px" placeholder="Paste transcript here…  (On YouTube: open the video → ‘…more’ → ‘Show transcript’ → copy the text)"></textarea>
-      <div class="muted" style="font-size:12px;margin-top:6px">✅ Always works — this never contacts YouTube from our server.</div>
-      <div style="height:12px"></div>
-      <button class="btn brand" id="lTextBtn">Generate notes from transcript</button>
-    </div>
-    <div id="lSrc_audio" class="hidden">
-      <label>Upload lecture audio</label>
-      <input type="file" id="lAudio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.mp4"/>
-      <div class="muted" style="font-size:12px;margin-top:6px">🧠 We transcribe it with AI (Whisper) — works even when a video has no captions. Keep the file within the upload size limit; for very long lectures, paste the transcript instead.</div>
-      <div style="height:12px"></div>
-      <button class="btn brand" id="lAudioBtn">Transcribe &amp; generate notes</button>
-    </div>
+    <label>YouTube URL</label><input id="lUrl" placeholder="Paste a YouTube link (youtu.be/… or youtube.com/watch?v=…)"/>
+    <div id="lThumb"></div><div style="height:12px"></div>
+    <button class="btn brand" id="lBtn">Generate notes</button>
     <div id="lResult"></div>
   </div>`);
-
-  // ---- source switcher ----
-  view().querySelectorAll("#lSrc .subtab").forEach(t=>t.addEventListener("click",()=>{
-    view().querySelectorAll("#lSrc .subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active");
-    ["url","paste","audio"].forEach(s=>{ const e=$("#lSrc_"+s); if(e) e.classList.toggle("hidden", s!==t.dataset.s); });
-  }));
 
   // ---- URL detected indicator (text only, no external image) ----
   $("#lUrl").addEventListener("input",()=>{ const vid=extractVideoId($("#lUrl").value.trim()); $("#lThumb").innerHTML = vid?('<div style="margin-top:10px"><span class="pill" style="color:var(--ok)">✅ Video detected</span> <span class="muted" style="font-size:12px">ID: '+escapeHtml(vid)+'</span></div>'):""; });
 
-  // ---- shared renderer (used by all three sources) ----
+  const status=(html)=>{ const R=$("#lResult"); if(R) R.innerHTML=html; };
+
+  // ---- shared renderer (used by every path in the chain) ----
   function renderLecture(d){
     const R=$("#lResult");
     const ti=d.topic_info||{}; let tiBanner="";
@@ -643,35 +622,107 @@ function rLecture(){
     R.querySelectorAll(".subtab").forEach(t=>t.addEventListener("click",()=>{ R.querySelectorAll(".subtab").forEach(x=>x.classList.remove("active")); t.classList.add("active"); ["notes","mind","q","chat"].forEach(p=>{const e=$("#lP_"+p,R); if(e)e.classList.toggle("hidden",p!==t.dataset.p);}); }));
   }
 
-  // ---- 1) YouTube URL flow ----
+  // ============================================================
+  //  ACQUISITION CHAIN (all seamless behind the single link box)
+  //  1) Server fetch (yt-dlp / captions)
+  //  2) On failure -> capture tab audio in the browser
+  //     2a) transcribe in-browser with Whisper (transformers.js) - free, private
+  //     2b) if that is unavailable -> send audio to server (Groq Whisper)
+  // ============================================================
+
+  // Lazily load the in-browser speech model. Built from URL fragments on
+  // purpose so the source string is never stored as a full literal URL.
+  let _asr=null;
+  async function getASR(onProg){
+    if(_asr) return _asr;
+    const cdn="https"+"://"+"cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+    const mod=await import(/* webpackIgnore: true */ cdn);
+    if(mod && mod.env){ mod.env.allowLocalModels=false; }
+    _asr=await mod.pipeline("automatic-speech-recognition","Xenova/whisper-base",{progress_callback:onProg});
+    return _asr;
+  }
+
+  // Decode an audio Blob into 16kHz mono Float32 PCM for Whisper.
+  async function blobToPCM(blob){
+    const ab=await blob.arrayBuffer();
+    const AC=window.AudioContext||window.webkitAudioContext;
+    const ctx=new AC({sampleRate:16000});
+    const buf=await ctx.decodeAudioData(ab);
+    const pcm=buf.getChannelData(0);
+    try{ ctx.close(); }catch(_){}
+    return pcm;
+  }
+
+  async function transcribeInBrowser(blob){
+    const asr=await getASR((p)=>{ if(p && p.status==="progress" && p.progress!=null){ status(`<div class="out"><span class="spin"></span> Loading speech model in your browser… ${Math.round(p.progress)}%<br><span class="muted" style="font-size:12px">First time only — it’s cached after this.</span></div>`); } });
+    status(`<div class="out"><span class="spin"></span> Transcribing audio in your browser… (free &amp; private)</div>`);
+    const pcm=await blobToPCM(blob);
+    const out=await asr(pcm,{chunk_length_s:30, stride_length_s:5, task:"transcribe"});
+    return ((out && out.text)||"").trim();
+  }
+
+  async function notesFromText(txt){
+    status(`<div class="out"><span class="spin"></span> Building notes from transcript…</div>`);
+    const d=await jpost("/lecture/process-text",{transcript:txt, medium:$("#lMed").value});
+    renderLecture(d);
+  }
+
+  async function notesFromAudioServer(blob){
+    status(`<div class="out"><span class="spin"></span> Transcribing on server (Whisper) &amp; building notes…</div>`);
+    const fd=new FormData(); fd.append("file", blob, "tab-audio.webm"); fd.append("medium", $("#lMed").value);
+    const resp=await fetch(apiUrl("/lecture/process-audio"),{method:"POST", headers:authHeaders(), body:fd});
+    let d={}; try{ d=await resp.json(); }catch(_){}
+    if(!resp.ok){ throw new Error((d&&d.detail)||("Audio processing failed (HTTP "+resp.status+")")); }
+    renderLecture(d);
+  }
+
+  // ---- step 2: tab-audio capture fallback (shown only when server fails) ----
+  function showAudioFallback(reason){
+    const R=$("#lResult");
+    R.innerHTML=`<div class="card" style="margin-top:12px">
+      <div class="out err">⚠️ Server couldn’t fetch this video${reason?(" — "+escapeHtml(String(reason))):""}.</div>
+      <p class="muted" style="font-size:13px;margin-top:8px">Koi baat nahi — play the video in another tab, click the button below, choose that tab and tick <b>“Share tab audio”</b>. We’ll turn its sound into notes — free &amp; private, right in your browser.</p>
+      <button class="btn brand" id="lCapBtn">🎧 Capture tab audio → notes</button>
+      <div id="lCapStatus"></div>
+    </div>`;
+    $("#lCapBtn").addEventListener("click",captureAndProcess);
+  }
+
+  async function captureAndProcess(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+      $("#lCapStatus").innerHTML=`<div class="out err" style="margin-top:10px">⚠️ Your browser can’t capture tab audio. Use Chrome/Edge on desktop.</div>`; return;
+    }
+    let stream;
+    try{ stream=await navigator.mediaDevices.getDisplayMedia({video:true, audio:true}); }
+    catch(e){ $("#lCapStatus").innerHTML=`<div class="out err" style="margin-top:10px">⚠️ Capture cancelled or blocked: ${escapeHtml(e.message||"")}</div>`; return; }
+    const aud=stream.getAudioTracks();
+    if(!aud.length){ stream.getTracks().forEach(t=>t.stop()); $("#lCapStatus").innerHTML=`<div class="out err" style="margin-top:10px">⚠️ No audio captured — re-share and make sure “Share tab audio” is ticked.</div>`; return; }
+    const mr=new MediaRecorder(new MediaStream(aud),{mimeType:(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm"))?"audio/webm":undefined});
+    const chunks=[];
+    mr.ondataavailable=(e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
+    mr.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(chunks,{type:"audio/webm"});
+      const R=$("#lResult");
+      try{
+        let txt="";
+        try{ txt=await transcribeInBrowser(blob); }catch(err){ txt=""; }
+        if(txt && txt.length>40){ await notesFromText(txt); }
+        else { await notesFromAudioServer(blob); }
+      }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message||"Failed to process audio")}</div>`; }
+    };
+    aud[0].addEventListener("ended",()=>{ if(mr.state!=="inactive") mr.stop(); });
+    $("#lCapStatus").innerHTML=`<div class="out" style="margin-top:10px"><span class="pill" style="color:var(--ok)">● Recording tab audio…</span> Play the video now, then click stop when the part you need is done.</div><div style="height:10px"></div><button class="btn" id="lStopBtn">⏹ Stop &amp; make notes</button>`;
+    $("#lStopBtn").addEventListener("click",()=>{ if(mr.state!=="inactive") mr.stop(); const b=$("#lStopBtn"); if(b){ b.disabled=true; b.textContent="Processing…"; } });
+    mr.start(1000);
+  }
+
+  // ---- step 1: the single entry point ----
   $("#lBtn").addEventListener("click",async()=>{
-    const url=$("#lUrl").value.trim(); if(!url){ return; } const R=$("#lResult");
-    R.innerHTML=`<div class="out"><span class="spin"></span> Fetching transcript &amp; building notes… (can take a bit)</div>`;
+    const url=$("#lUrl").value.trim(); if(!url){ return; }
+    status(`<div class="out"><span class="spin"></span> Fetching transcript &amp; building notes… (can take a bit)</div>`);
     try{ const d=await jpost("/lecture/process",{youtube_url:url, medium:$("#lMed").value}); renderLecture(d); }
-    catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
-  });
-
-  // ---- 2) Paste-transcript flow (never touches YouTube) ----
-  $("#lTextBtn").addEventListener("click",async()=>{
-    const txt=$("#lText").value.trim(); const R=$("#lResult");
-    if(txt.length<200){ R.innerHTML=`<div class="out err">⚠️ Please paste a longer transcript (at least a few paragraphs of spoken content).</div>`; return; }
-    R.innerHTML=`<div class="out"><span class="spin"></span> Building notes from your transcript…</div>`;
-    try{ const d=await jpost("/lecture/process-text",{transcript:txt, medium:$("#lMed").value}); renderLecture(d); }
-    catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
-  });
-
-  // ---- 3) Audio-upload flow (Groq Whisper) ----
-  $("#lAudioBtn").addEventListener("click",async()=>{
-    const f=$("#lAudio").files[0]; const R=$("#lResult");
-    if(!f){ R.innerHTML=`<div class="out err">⚠️ Please choose an audio file first.</div>`; return; }
-    R.innerHTML=`<div class="out"><span class="spin"></span> Transcribing audio &amp; building notes… (this can take a minute)</div>`;
-    try{
-      const fd=new FormData(); fd.append("file", f, f.name); fd.append("medium", $("#lMed").value);
-      const resp=await fetch(apiUrl("/lecture/process-audio"),{method:"POST", headers:authHeaders(), body:fd});
-      let d={}; try{ d=await resp.json(); }catch(_){}
-      if(!resp.ok){ throw new Error((d&&d.detail)||("Audio processing failed (HTTP "+resp.status+")")); }
-      renderLecture(d);
-    }catch(e){ R.innerHTML=`<div class="out err">⚠️ ${escapeHtml(e.message)}</div>`; }
+    catch(e){ showAudioFallback(e && e.message); }
   });
 }
 
