@@ -3,6 +3,7 @@ Lecture Agent - YouTube transcript, translation, notes, RAG chat
 """
 
 import re
+import os
 import logging
 import requests
 
@@ -49,9 +50,21 @@ def extract_video_id(url: str) -> str | None:
 # TRANSCRIPT FETCHING
 # ─────────────────────────────────────────
 
+def _ytdlp_proxy() -> str:
+    """Residential/HTTP proxy URL from env (YTDLP_PROXY). Empty => direct.
+
+    Set this on the host (e.g. Render) to route YouTube caption traffic through
+    a residential IP, since shared datacenter IPs are frequently bot-blocked.
+    Format: http://user:pass@host:port  (or http://host:port for IP-auth).
+    """
+    return os.getenv("YTDLP_PROXY", "").strip()
+
+
 def _fetch_json3(url: str) -> str:
-    """Fetch and parse json3 subtitle format."""
-    r = requests.get(url, timeout=15)
+    """Fetch and parse json3 subtitle format (through the proxy if configured)."""
+    proxy = _ytdlp_proxy()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    r = requests.get(url, timeout=15, proxies=proxies)
     r.raise_for_status()
     data = r.json()
     text = " ".join([
@@ -99,8 +112,7 @@ def get_transcript(video_id: str) -> tuple[str, str]:
     #   YTDLP_PROXY   -> residential/HTTP proxy URL (host:port, optional auth)
     #   YTDLP_COOKIES -> path to a Netscape cookies.txt exported from a
     #                    logged-in YouTube session
-    import os
-    _proxy = os.getenv("YTDLP_PROXY", "").strip()
+    _proxy = _ytdlp_proxy()
     if _proxy:
         ydl_opts["proxy"] = _proxy
     _cookies = os.getenv("YTDLP_COOKIES", "").strip()
