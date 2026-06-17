@@ -733,10 +733,72 @@ function rLecture(){
     mr.start(1000);
   }
 
+  // ---- native (Capacitor Android) helpers: caption fetch from device IP ----
+  function isNativeApp(){
+    try{ return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform()); }
+    catch(_){ return false; }
+  }
+  function sliceBalancedJSON(s, startIdx){
+    let depth=0, inStr=false, esc=false;
+    for(let i=startIdx;i<s.length;i++){
+      const code=s.charCodeAt(i);
+      if(inStr){
+        if(esc){ esc=false; }
+        else if(code===92){ esc=true; }
+        else if(code===34){ inStr=false; }
+      } else {
+        if(code===34){ inStr=true; }
+        else if(code===123){ depth++; }
+        else if(code===125){ depth--; if(depth===0){ return s.slice(startIdx, i+1); } }
+      }
+    }
+    return null;
+  }
+  async function fetchCaptionsNative(vid){
+    const YT = "https" + "://" + "www.youtube.com";
+    const watchUrl = YT + "/watch?v=" + vid + "&hl=en";
+    const res = await fetch(watchUrl, { headers: { "Accept-Language": "en-US,en;q=0.9,hi;q=0.8" } });
+    const html = await res.text();
+    const key = "ytInitialPlayerResponse";
+    const ki = html.indexOf(key);
+    if(ki < 0){ throw new Error("player data not found"); }
+    const eq = html.indexOf("=", ki);
+    const brace = html.indexOf("{", eq);
+    if(brace < 0){ throw new Error("player json not found"); }
+    const jsonStr = sliceBalancedJSON(html, brace);
+    if(!jsonStr){ throw new Error("could not parse player json"); }
+    const data = JSON.parse(jsonStr);
+    const tracks = (((data.captions||{}).playerCaptionsTracklistRenderer||{}).captionTracks) || [];
+    if(!tracks.length){ throw new Error("no captions on this video"); }
+    const prefs = ["hi","en"];
+    let track = null;
+    for(const p of prefs){ track = tracks.find(function(t){ return (t.languageCode||"").indexOf(p) === 0; }); if(track){ break; } }
+    if(!track){ track = tracks[0]; }
+    let capUrl = track.baseUrl;
+    if(capUrl.indexOf("fmt=") < 0){ capUrl += "&fmt=json3"; }
+    const cr = await fetch(capUrl);
+    const cj = await cr.json();
+    const parts = (cj.events||[]).map(function(ev){ return (ev.segs||[]).map(function(sg){ return sg.utf8 || ""; }).join(""); }).join(" ");
+    const text = parts.split("  ").join(" ").trim();
+    if(!text){ throw new Error("empty transcript"); }
+    return text;
+  }
+
   // ---- step 1: the single entry point ----
   $("#lBtn").addEventListener("click",async()=>{
     const url=$("#lUrl").value.trim(); if(!url){ return; }
     status(`<div class="out"><span class="spin"></span> Fetching transcript &amp; building notes… (can take a bit)</div>`);
+    // Native Android app: fetch captions directly from the device IP (bypasses datacenter block).
+    if(isNativeApp()){
+      try{
+        const vid=extractVideoId(url);
+        if(vid){
+          status(`<div class="out"><span class="spin"></span> Fetching transcript on your device…</div>`);
+          const ntxt=await fetchCaptionsNative(vid);
+          if(ntxt && ntxt.length>40){ await notesFromText(ntxt); return; }
+        }
+      }catch(nerr){ /* fall through to server + capture chain */ }
+    }
     try{ const d=await jpost("/lecture/process",{youtube_url:url, medium:$("#lMed").value}); renderLecture(d); }
     catch(e){ showAudioFallback(e && e.message); }
   });

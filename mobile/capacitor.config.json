@@ -1,0 +1,14 @@
+{
+  "appId": "ai.upsc.app",
+  "appName": "UPSC AI",
+  "webDir": "www",
+  "server": {
+    "url": "https://upsc-agentic-ai.vercel.app/app-frontend.html?auth=1",
+    "cleartext": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

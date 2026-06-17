@@ -44,3 +44,8 @@ Thumbs.db
 
 # ---- Misc downloads / scratch ----
 *.tmp
+
+# Capacitor / mobile build
+node_modules/
+mobile/node_modules/
+mobile/android/
