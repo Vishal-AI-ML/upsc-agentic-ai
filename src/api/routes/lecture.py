@@ -2,7 +2,7 @@
 Lecture routes - YouTube lecture processing
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from src.models.schemas import (
@@ -11,6 +11,7 @@ from src.models.schemas import (
 from src.agents.lecture.graph import (
     process_lecture, ask_lecture, extract_video_id,
     process_lecture_from_text, process_lecture_from_audio,
+    build_lecture_chat_index,
 )
 
 from src.core.config import settings
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/lecture", tags=["Lecture"])
 
 
 @router.post("/process", response_model=LectureResponse)
-async def process(request: LectureRequest):
+async def process(request: LectureRequest, background_tasks: BackgroundTasks):
     """Process YouTube lecture and generate notes."""
     try:
         video_id = extract_video_id(request.youtube_url)
@@ -27,6 +28,11 @@ async def process(request: LectureRequest):
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         
         result = process_lecture(request.youtube_url, request.medium)
+        # Index for chat AFTER the notes response is sent, so a heavy/failing
+        # vector step can never drop the notes response ("Failed to fetch").
+        background_tasks.add_task(
+            build_lecture_chat_index, result["video_id"], result.get("_transcript", "")
+        )
         return {
             "notes": result["notes"],
             "topic_info": result["topic_info"],
@@ -41,10 +47,13 @@ async def process(request: LectureRequest):
 
 
 @router.post("/process-text", response_model=LectureResponse)
-async def process_text(request: LectureTextRequest):
+async def process_text(request: LectureTextRequest, background_tasks: BackgroundTasks):
     """Build lecture notes from a user-pasted transcript (no YouTube fetch)."""
     try:
         result = process_lecture_from_text(request.transcript, request.medium)
+        background_tasks.add_task(
+            build_lecture_chat_index, result["video_id"], result.get("_transcript", "")
+        )
         return {
             "notes": result["notes"],
             "topic_info": result["topic_info"],
@@ -59,7 +68,7 @@ async def process_text(request: LectureTextRequest):
 
 
 @router.post("/process-audio", response_model=LectureResponse)
-async def process_audio(file: UploadFile = File(...), medium: str = Form("English")):
+async def process_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...), medium: str = Form("English")):
     """Transcribe an uploaded audio file (Groq Whisper) and build notes.
 
     Works for caption-less lectures and videos the server is blocked from.
@@ -73,6 +82,9 @@ async def process_audio(file: UploadFile = File(...), medium: str = Form("Englis
         )
     try:
         result = process_lecture_from_audio(content, file.filename or "audio.mp3", medium)
+        background_tasks.add_task(
+            build_lecture_chat_index, result["video_id"], result.get("_transcript", "")
+        )
         return {
             "notes": result["notes"],
             "topic_info": result["topic_info"],

@@ -10,7 +10,7 @@ import requests
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.core.llm import get_llm
-from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for
+from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for, vector_store_exists
 from src.agents.lecture.prompts import (
     TRANSLATE_PROMPT, TOPIC_PROMPT, NOTES_PROMPT, CHAT_PROMPT
 )
@@ -321,9 +321,12 @@ def _build_from_transcript(transcript: str, lang: str, video_id: str, medium: st
     if notes and not notes.startswith("⚠️"):
         notes = "> ⚠️ AI-generated notes - cross-check key facts, dates, and names with a standard source." + chr(10) + chr(10) + notes
 
-    # Create vector store for chat
-    key = make_persist_key("lecture", video_id)
-    create_vector_store(english_text, persist_key=key)
+    # Chat RAG index is built lazily in the background (scheduled by the route)
+    # rather than inline here. Building/loading the vector store inline kept the
+    # notes HTTP response blocked behind a memory-heavy vector step; if that step
+    # crashed the worker on a small host, the whole response was lost ("Failed to
+    # fetch") even though the notes had already been generated. Deferring it lets
+    # the notes return first; chat indexing then happens off the request path.
 
     # Generate study aids (mind map + practice questions) - skip when notes failed
     if notes and not notes.startswith("⚠️"):
@@ -340,7 +343,29 @@ def _build_from_transcript(transcript: str, lang: str, video_id: str, medium: st
         "questions_html": questions_html,
         "topic_info": topic_info,
         "video_id": video_id,
+        # Internal only: consumed by the route to build the chat RAG index in a
+        # background task after the response is sent. Not part of the API schema.
+        "_transcript": english_text,
     }
+
+
+def build_lecture_chat_index(video_id: str, transcript: str) -> None:
+    """Index a lecture transcript for chat RAG. Best-effort and deferred.
+
+    Scheduled as a background task so it runs *after* the notes response has been
+    returned to the client. Any failure here only reduces chat grounding for that
+    video; it must never propagate to (or crash) the notes request.
+    """
+    if not transcript or not video_id:
+        return
+    try:
+        key = make_persist_key("lecture", video_id)
+        if vector_store_exists(key):
+            return
+        create_vector_store(transcript, persist_key=key)
+        logger.info(f"Lecture chat index ready: {video_id}")
+    except Exception as e:
+        logger.warning(f"Lecture chat index build failed for {video_id}: {e}")
 
 
 def process_lecture(youtube_url: str, medium: str = "English") -> dict:
