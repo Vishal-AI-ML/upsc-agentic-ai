@@ -9,7 +9,8 @@ import json
 import html
 import logging
 
-from src.core.llm import get_llm
+from src.core.llm import get_fast_llm
+from src.core.observability import trace_config
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,10 @@ def generate_study_aids(text: str, topic: str = "", paper: str = ""):
     )
 
     try:
-        res = get_llm().invoke(prompt)
+        # Study aids are structured JSON generation, not deep reasoning, so use
+        # the fast/cheap chain (flash-lite first) to avoid the ~15x cost of the
+        # full reasoning model. trace_config makes the call legible in Langfuse.
+        res = get_fast_llm().invoke(prompt, config=trace_config("study-aids"))
         raw = res.content if hasattr(res, "content") else str(res)
     except Exception as e:
         logger.error(f"study_aids LLM call failed: {e}")

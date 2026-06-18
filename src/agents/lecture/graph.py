@@ -10,6 +10,7 @@ import requests
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.core.llm import get_llm
+from src.core.observability import trace_config
 from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for, vector_store_exists
 from src.agents.lecture.prompts import (
     TRANSLATE_PROMPT, TOPIC_PROMPT, NOTES_PROMPT, CHAT_PROMPT
@@ -33,16 +34,21 @@ def extract_video_id(url: str) -> str | None:
     """Extract YouTube video ID from URL."""
     if not url or not url.strip():
         return None
+    url = url.strip()
     patterns = [
         r"(?:v=)([0-9A-Za-z_-]{11})",
-        r"(?:youtu.be/)([0-9A-Za-z_-]{11})",
+        r"(?:youtu\.be/)([0-9A-Za-z_-]{11})",
         r"(?:embed/)([0-9A-Za-z_-]{11})",
         r"(?:shorts/)([0-9A-Za-z_-]{11})",
+        r"(?:live/)([0-9A-Za-z_-]{11})",
     ]
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
+    # Fallback: the user pasted a bare 11-char video ID with no URL wrapper.
+    if re.fullmatch(r"[0-9A-Za-z_-]{11}", url):
+        return url
     return None
 
 
@@ -199,7 +205,7 @@ def _translate_if_needed(text: str, lang: str) -> str:
     for i, chunk in enumerate(chunks):
         logger.info(f"Translating chunk {i+1}/{len(chunks)}")
         try:
-            results.append(chain.invoke({"text": chunk}).content)
+            results.append(chain.invoke({"text": chunk}, config=trace_config("lecture-translate")).content)
         except Exception as e:
             logger.warning(f"Chunk {i+1} translation failed: {e}")
             results.append(chunk)
@@ -215,7 +221,7 @@ def _detect_topic(text: str) -> dict:
     """Detect lecture topic and UPSC relevance."""
     try:
         chain = TOPIC_PROMPT | get_llm()
-        res = chain.invoke({"text": text[:4000]}).content
+        res = chain.invoke({"text": text[:4000]}, config=trace_config("topic-detect")).content
         result = {
             "topic": "Unknown",
             "paper": "Unknown",
@@ -313,7 +319,7 @@ def _build_from_transcript(transcript: str, lang: str, video_id: str, medium: st
             "paper": topic_info["paper"],
             "syllabus": topic_info["syllabus"],
             "medium": medium,
-        }).content
+        }, config=trace_config("lecture-notes", session_id=f"lecture:{video_id}")).content
     except Exception as e:
         logger.error(f"Notes generation failed: {e}")
         notes = "⚠️ Notes generation failed. Please retry."
@@ -511,7 +517,7 @@ def ask_lecture(
             "question": question.strip(),
             "topic": topic,
             "paper": paper,
-        }):
+        }, config=trace_config("lecture-chat")):
             if hasattr(chunk, "content"):
                 yield chunk.content
     except Exception as e:

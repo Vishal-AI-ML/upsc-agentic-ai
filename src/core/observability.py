@@ -79,6 +79,53 @@ def langchain_callbacks() -> list:
     return [handler] if handler is not None else []
 
 
+def trace_config(
+    name: str,
+    *,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    tags: list | None = None,
+    with_callbacks: bool = False,
+    extra: dict | None = None,
+) -> dict:
+    """Build a LangChain runnable config that makes Langfuse traces readable.
+
+    Adds a human-friendly ``name`` plus optional user/session attribution and
+    tags. These travel as the reserved ``langfuse_*`` metadata keys, which are
+    inherited by every nested run, so the model-level handler attached in
+    ``llm.py`` records them even when the handler itself is not attached here.
+    The result: dashboard rows can be filtered by user, grouped by session and
+    labelled by tag instead of showing only a bare model-class name.
+
+    Set ``with_callbacks=True`` only when the invoked runnable does NOT already
+    carry the Langfuse handler; otherwise the same handler would be registered
+    twice and emit duplicate observations.
+
+    Args:
+        name: Trace/run name, e.g. "lecture-notes" or "study-aids".
+        user_id: Optional end-user id for per-user filtering.
+        session_id: Optional id to group related traces (e.g. a thread/video).
+        tags: Optional dashboard tags; defaults to ``[name]``.
+        with_callbacks: Attach the Langfuse handler at config level too.
+        extra: Optional extra metadata to merge in.
+    """
+    label_tags = list(tags) if tags else [name]
+    metadata: dict = {"langfuse_tags": label_tags}
+    if user_id:
+        metadata["langfuse_user_id"] = user_id
+    if session_id:
+        metadata["langfuse_session_id"] = session_id
+    if extra:
+        metadata.update(extra)
+
+    config: dict = {"run_name": name, "tags": label_tags, "metadata": metadata}
+    if with_callbacks:
+        cbs = langchain_callbacks()
+        if cbs:
+            config["callbacks"] = cbs
+    return config
+
+
 def flush() -> None:
     """Best-effort flush of pending traces (call on shutdown)."""
     if not langfuse_enabled():

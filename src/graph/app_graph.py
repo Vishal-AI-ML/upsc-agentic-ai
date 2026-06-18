@@ -32,6 +32,8 @@ def build_app():
 def make_config(
     thread_id: str,
     user_id: Optional[str] = None,
+    trace_name: str = "upsc-chat",
+    session_id: Optional[str] = None,
     extra: Optional[dict] = None,
 ) -> dict:
     """Build an invoke config with Langfuse tracing callbacks attached.
@@ -43,6 +45,8 @@ def make_config(
     Args:
         thread_id: Conversation/session key for the checkpointer (required).
         user_id: Optional user key for long-term memory and trace attribution.
+        trace_name: Langfuse trace name shown in the dashboard.
+        session_id: Optional Langfuse session id; defaults to thread_id.
         extra: Optional additional ``configurable`` values to merge in.
     """
     configurable: dict = {"thread_id": thread_id}
@@ -50,7 +54,22 @@ def make_config(
         configurable["user_id"] = user_id
     if extra:
         configurable.update(extra)
-    return {"configurable": configurable, "callbacks": langchain_callbacks()}
+
+    # Langfuse trace attribution: a readable trace name plus user/session
+    # grouping so the dashboard shows meaningful rows instead of bare model
+    # names. The session defaults to the conversation thread when not given.
+    metadata: dict = {"langfuse_tags": ["upsc-ai"]}
+    if user_id is not None:
+        metadata["langfuse_user_id"] = user_id
+    metadata["langfuse_session_id"] = session_id or thread_id
+
+    return {
+        "configurable": configurable,
+        "callbacks": langchain_callbacks(),
+        "run_name": trace_name,
+        "tags": ["upsc-ai"],
+        "metadata": metadata,
+    }
 
 
 # ============================ Local smoke test =================================
