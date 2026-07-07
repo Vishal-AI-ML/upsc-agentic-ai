@@ -41,7 +41,7 @@ jobs:
           uv run python -m py_compile \
             src/graph/rag_graph.py src/graph/state.py src/graph/profile.py src/graph/tools.py \
             src/core/retrieval.py src/core/vector_store.py \
-            src/eval/llm_eval.py src/eval/retrieval_eval.py \
+            src/eval/gates.py src/eval/llm_eval.py src/eval/retrieval_eval.py \
             src/api/routes/chat.py
       - name: Run offline tests
         run: uv run pytest -q
@@ -74,8 +74,8 @@ jobs:
           python-version-file: .python-version
       - name: Sync dependencies
         run: uv sync --frozen
-      - name: Run LLM-as-judge eval with report
-        run: uv run python -m src.eval.llm_eval --gate 0.9 --report src/eval/eval_report.md
+      - name: Run LLM-as-judge eval with strict multi-metric + per-agent gate
+        run: uv run python -m src.eval.llm_eval --gate 0.9 --report src/eval/eval_report.md --strict --relevancy-gate 0.7 --precision-gate 0.6
       - name: Upload eval report
         if: always()
         uses: actions/upload-artifact@v4

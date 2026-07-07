@@ -5,7 +5,7 @@ Lecture routes - YouTube lecture processing
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import (
+from src.schemas import (
     LectureRequest, LectureResponse, LectureChatRequest, LectureTextRequest
 )
 from src.agents.lecture.graph import (

@@ -129,6 +129,19 @@ def get_fast_llm():
     return _fast_llm_instance
 
 
+def get_llm_for_tier(tier: str = "strong"):
+    """Return the LLM chain for a complexity tier (see src.core.model_router).
+
+        "lite"   -> get_fast_llm()  (flash-lite first: fast + cheap, saves quota)
+        "strong" -> get_llm()       (flash first: best quality)
+
+    Unknown/None tiers fall back to the strong chain (quality-first is the safe
+    default). This reuses the existing cached singletons, so tier routing adds
+    NO new model instances and NO extra cost - it just picks which chain runs.
+    """
+    return get_fast_llm() if str(tier).lower() == "lite" else get_llm()
+
+
 def reset_llm() -> None:
     """Force re-initialize both LLM chains."""
     global _llm_instance, _fast_llm_instance

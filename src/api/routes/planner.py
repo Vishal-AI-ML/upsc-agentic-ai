@@ -5,8 +5,8 @@ Planner routes - Study plan generation
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import PlannerRequest, PlannerResponse
-from src.agents.planner.graph import generate_plan
+from src.schemas import PlannerRequest, PlannerResponse
+from src.agents.planner.graph import generate_plan, get_plan_meta
 
 router = APIRouter(prefix="/planner", tags=["Planner"])
 
@@ -39,4 +39,4 @@ async def generate_sync(request: PlannerRequest):
         attempt_number=request.attempt_number,
     ):
         response += chunk
-    return {"plan": response}
+    return {"plan": response, "meta": get_plan_meta(request.goal).model_dump()}

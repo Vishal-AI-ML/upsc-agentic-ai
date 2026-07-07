@@ -17,7 +17,7 @@ def _log_eval(kind, text):
     """Parse 'Score: X/Y' and log eval accuracy (best-effort)."""
     try:
         from src.core import observability
-        m = re.search(r"Score:\s*(\d+)\s*/\s*(\d+)", text)
+        m = re.search(r"Score\s*:?\s*\[?\s*(\d+)\s*\]?\s*/\s*(\d+)", text)
         if m:
             observability.log_eval_metrics(kind, int(m.group(1)), int(m.group(2)))
     except Exception:
@@ -162,5 +162,5 @@ def get_model_answer(
 
 def parse_score(evaluation: str) -> int | None:
     """Extract score from evaluation text."""
-    match = re.search(r"Score:\s*(\d+)/\d+", evaluation)
+    match = re.search(r"Score\s*:?\s*\[?\s*(\d+)", evaluation)
     return int(match.group(1)) if match else None

@@ -81,6 +81,11 @@ def get_daily_ca(selected_date: str):
         from src.agents.current_affairs.ingest import fetch_headlines
         headlines = fetch_headlines(limit=25)
         if headlines:
+            # RSS titles/descriptions are UNTRUSTED external text - fence them
+            # before they enter the daily-CA prompt.
+            from src.core.prompt_safety import harden_untrusted
+
+            headlines = harden_untrusted(headlines, label="news headlines")
             news_context = "REAL HEADLINES + SHORT SNIPPETS (this is the ENTIRE source text available — there are no full articles; ground every topic strictly in these and invent nothing beyond them):" + chr(10) + headlines
     except Exception as e:
         logger.warning(f"CA headline grounding unavailable: {e}")
@@ -136,6 +141,12 @@ def get_monthly_summary(month: str, year: str):
     yield ("> 📡 Grounded in real news retrieved from free sources (Google News, Tavily, DuckDuckGo) for "
            + str(month) + " " + str(year) + " - " + str(count)
            + " items organised below. Still cross-verify figures against PIB / The Hindu before the exam." + chr(10) + chr(10))
+
+    # Retrieved month news is UNTRUSTED external text - fence it before the prompt.
+    if news_context:
+        from src.core.prompt_safety import harden_untrusted
+
+        news_context = harden_untrusted(news_context, label="monthly news")
 
     try:
         chain = MONTHLY_PROMPT | get_llm()

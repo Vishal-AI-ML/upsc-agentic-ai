@@ -35,4 +35,7 @@ def test_rag_has_grounding_verification_step():
     source = inspect.getsource(rag_graph.build_rag_subgraph)
     assert "verify_grounding" in source
     assert "GroundingCheck" in inspect.getsource(rag_graph)
-    assert "Sources used:" in inspect.getsource(rag_graph)
+    # Step 10: citation formatting centralised into src.core.grounding
+    import src.core.grounding as grounding
+    assert "Sources used:" in inspect.getsource(grounding)
+    assert "format_sources" in inspect.getsource(rag_graph)

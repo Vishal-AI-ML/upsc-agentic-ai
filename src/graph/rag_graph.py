@@ -17,7 +17,9 @@ Nodes:
                actually answer the question (the corrective step that catches
                weak/irrelevant retrievals before they reach generation).
     web_search Optional fallback to live web context when retrieval is not
-               relevant, re-using the mentor module's search helper.
+               relevant, re-using the mentor module's search helper. The live
+               web text is untrusted, so it is wrapped with ``harden_untrusted``
+               before it is ever placed on the state / shown to the model.
     generate   Produce a grounded answer, instructed to never fabricate facts.
     verify_grounding  Check the final answer against available evidence and append
                a compact trust note (confidence + sources) without fabricating citations.
@@ -26,6 +28,9 @@ The default prompt is a generic grounded-RAG template. To preserve an agent's
 bespoke prompt (e.g. NCERT's subject/paper framing), pass that agent's
 ``ChatPromptTemplate`` as ``generate_prompt`` together with an ``input_builder``
 that maps the state into that prompt's input variables.
+
+Citation / trust-note formatting lives in ``src.core.grounding`` (pure, offline
+tested) so the RAG subgraph and the mentor tool-agent share one implementation.
 """
 from __future__ import annotations
 
@@ -44,6 +49,19 @@ from src.core.llm import get_llm, get_fast_llm
 from src.core.vector_store import (
     load_vector_store,
     similarity_search_with_sources,
+)
+from src.core.prompt_safety import harden_untrusted
+
+# Citation + trust-note formatting is centralised in src.core.grounding so the
+# RAG subgraph and the mentor tool-agent share exactly one implementation. The
+# private aliases keep the in-graph call sites (and existing tests that import
+# ``_format_sources`` from this module) unchanged.
+from src.core.grounding import (
+    source_label as _source_label,
+    format_sources as _format_sources,
+    format_trust_note as _format_trust_note,
+    derive_confidence,
+    extract_web_citations,
 )
 
 # Re-use the mentor module's web search helper for the CRAG fallback.
@@ -104,46 +122,6 @@ _VERIFY_SYS = (
     "contains unsupported factual claims. List only concrete unsupported claims; "
     "do not penalize harmless wording, structure, or study advice."
 )
-
-
-def _source_label(chunk: dict) -> str:
-    """Format one retrieved chunk as a user-facing citation label."""
-    metadata = chunk.get("metadata") or {}
-    source_type = metadata.get("source_type") or "retrieved context"
-    title = metadata.get("source_title") or metadata.get("filename") or metadata.get("chapter") or "source"
-    chunk_index = metadata.get("chunk_index")
-    score = chunk.get("score")
-    parts = [str(title)]
-    if source_type:
-        parts.append(f"type={source_type}")
-    if chunk_index is not None:
-        parts.append(f"chunk={chunk_index}")
-    if score is not None:
-        parts.append(f"score={score}")
-    return " — ".join(parts)
-
-
-def _format_sources(citations: list[str | dict]) -> str:
-    """Create compact, user-facing source notes without inventing metadata."""
-    cleaned = [c for c in citations if c]
-    if not cleaned:
-        return ""
-    lines = ["\n\nSources used:"]
-    for i, citation in enumerate(cleaned[:5], start=1):
-        label = _source_label(citation) if isinstance(citation, dict) else str(citation)
-        lines.append(f"- {i}. {label}")
-    return "\n".join(lines)
-
-
-def _format_trust_note(confidence: str, unsupported_claims: list[str]) -> str:
-    """Append a short reliability note only when the answer needs caution."""
-    if confidence == "high" and not unsupported_claims:
-        return ""
-    note = f"\n\nReliability note: grounding confidence is {confidence}."
-    if unsupported_claims:
-        trimmed = unsupported_claims[:3]
-        note += " Potentially unsupported claim(s): " + "; ".join(trimmed)
-    return note
 
 
 # ============================ Structured grader ================================
@@ -259,8 +237,21 @@ def build_rag_subgraph(
         return "generate"
 
     def web_search_node(state: AgentState) -> dict:
-        """Fetch live web context as a corrective fallback."""
-        return {"search_results": _fetch_search_context(state["question"]) or ""}
+        """Fetch live web context as a corrective fallback.
+
+        Live web text is UNTRUSTED: wrap it with ``harden_untrusted`` before it
+        reaches the generation prompt / grounding verifier, and surface the
+        source URLs as citations so a web-only answer is still attributed.
+        """
+        raw = _fetch_search_context(state["question"]) or ""
+        web_citations = extract_web_citations(raw)
+        existing = list(state.get("citations") or [])
+        return {
+            "search_results": (
+                harden_untrusted(raw, label="live web search results") if raw else ""
+            ),
+            "citations": existing + web_citations,
+        }
 
     def generate_node(state: AgentState) -> dict:
         """Generate a grounded answer from context (and any web fallback)."""
@@ -276,12 +267,15 @@ def build_rag_subgraph(
             part for part in (state.get("kb_context", ""), state.get("search_results", "")) if part
         )
         citations = state.get("citations", []) or []
-        confidence = "high" if state.get("grounded") and state.get("rag_relevant") else "medium"
+        has_evidence = bool(evidence.strip())
+        confidence = derive_confidence(
+            grounded=bool(state.get("grounded")),
+            relevant=bool(state.get("rag_relevant")),
+            has_evidence=has_evidence,
+        )
         unsupported_claims: list[str] = []
 
-        if not evidence.strip():
-            confidence = "low"
-        else:
+        if has_evidence:
             try:
                 verifier = _structured_llm(GroundingCheck)
                 check = verifier.invoke(
@@ -299,7 +293,7 @@ def build_rag_subgraph(
                 unsupported_claims = list(check.unsupported_claims or [])
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("[%s] grounding verification failed (%s)", label, exc)
-                confidence = "medium" if evidence.strip() else "low"
+                confidence = "medium" if has_evidence else "low"
 
         final_answer = answer + _format_sources(citations) + _format_trust_note(confidence, unsupported_claims)
         return {

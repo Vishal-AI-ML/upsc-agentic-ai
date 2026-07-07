@@ -5,9 +5,10 @@ Evaluator routes - Answer evaluation
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import (
+from src.schemas import (
     EvaluateRequest, MainsEvalRequest, ModelAnswerRequest
 )
+from src.core.eval_parse import parse_answer_evaluation, parse_mains_evaluation
 from src.agents.evaluator.graph import (
     evaluate_answer, evaluate_mains, get_model_answer
 )
@@ -31,7 +32,10 @@ async def evaluate_sync(request: EvaluateRequest):
     response = ""
     for chunk in evaluate_answer(request.question, request.answer):
         response += chunk
-    return {"response": response}
+    return {
+        "response": response,
+        "structured": parse_answer_evaluation(response).model_dump(),
+    }
 
 
 @router.post("/mains")
@@ -62,7 +66,10 @@ async def mains_eval_sync(request: MainsEvalRequest):
         word_limit=request.word_limit,
     ):
         response += chunk
-    return {"response": response}
+    return {
+        "response": response,
+        "structured": parse_mains_evaluation(response, max_marks=request.marks).model_dump(),
+    }
 
 
 @router.post("/model-answer")

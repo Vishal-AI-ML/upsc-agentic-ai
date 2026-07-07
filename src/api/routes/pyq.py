@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_current_user
 from src.agents.lecture.graph import extract_video_id
-from src.models.schemas import (
+from src.schemas import (
     QuestionGenRequest, ParseRequest, ParseResponse,
     HintRequest, ExplanationRequest, TopicSuggestionsResponse,
     BankGenRequest, BankUploadResponse, BankStatusResponse,

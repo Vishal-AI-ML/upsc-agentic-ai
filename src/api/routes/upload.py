@@ -5,7 +5,7 @@ Upload routes - PDF processing and chat
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import ChatRequest
+from src.schemas import ChatRequest
 from src.agents.upload.graph import process_upload, ask_upload
 
 router = APIRouter(prefix="/upload", tags=["Upload"])

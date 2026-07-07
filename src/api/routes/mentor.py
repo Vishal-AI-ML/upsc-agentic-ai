@@ -19,7 +19,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.models.schemas import MentorRequest, MentorResponse
+from src.schemas import MentorRequest, MentorResponse
 from src.graph.mentor_graph import build_mentor_graph
 
 logger = logging.getLogger(__name__)

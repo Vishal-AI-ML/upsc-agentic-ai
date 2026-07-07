@@ -5,7 +5,7 @@ Current Affairs routes - Daily CA, Editorials, Monthly digest
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import (
+from src.schemas import (
     DailyCARequest, EditorialRequest, MonthlyRequest,
     EditorialTopicsResponse, AvailableDatesResponse, AvailableMonthsResponse
 )

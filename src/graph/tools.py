@@ -25,6 +25,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
+from src.core.grounding import citations_from_tool_messages, format_sources
+from src.core.model_router import describe_route
+
 logger = logging.getLogger(__name__)
 
 # Cap on model<->tools round-trips inside build_tool_agent, so a misbehaving
@@ -70,7 +73,12 @@ def web_search_tool_fn(query: str) -> str:
     except Exception as exc:  # noqa: BLE001
         logger.warning("web_search unavailable: %s", exc)
         result = ""
-    return result or (
+    if result:
+        # Live web text is UNTRUSTED - fence it before the model reads it.
+        from src.core.prompt_safety import harden_untrusted
+
+        return harden_untrusted(result, label="live web search results")
+    return (
         "No live web results found (search backend unavailable or returned "
         "nothing). Do not answer dated facts from memory."
     )
@@ -92,7 +100,13 @@ def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
         from src.core import mentor_kb
 
         kb = mentor_kb.search_kb(query, k=4)
-        return kb.get("context") or "No matching background knowledge found."
+        context = kb.get("context")
+        if not context:
+            return "No matching background knowledge found."
+        # KB passages originate from ingested (untrusted) documents - fence them.
+        from src.core.prompt_safety import harden_untrusted
+
+        return harden_untrusted(context, label="knowledge base excerpt")
 
     from src.core.vector_store import load_vector_store
 
@@ -107,10 +121,21 @@ def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
 
     parts = []
     for doc, _score in scored:
-        src = (getattr(doc, "metadata", None) or {}).get("source")
+        meta = getattr(doc, "metadata", None) or {}
+        src = (
+            meta.get("source_title")
+            or meta.get("filename")
+            or meta.get("source")
+            or meta.get("chapter")
+        )
         prefix = f"[{src}] " if src else ""
         parts.append(f"{prefix}{doc.page_content}")
-    return "\n\n".join(parts) if parts else "No relevant passages found."
+    if not parts:
+        return "No relevant passages found."
+    # Retrieved document text is untrusted - fence it before the model reads it.
+    from src.core.prompt_safety import harden_untrusted
+
+    return harden_untrusted("\n\n".join(parts), label="knowledge base excerpt")
 
 
 # Registry: tool name -> plain callable. Names MUST match get_structured_tools().
@@ -352,21 +377,28 @@ def build_tool_agent(
     # merely constructing the app (supervisor startup, or smoke tests that boot
     # the app with no GOOGLE_API_KEY/GROQ_API_KEY) crashes with "No LLM provider
     # available". Models are cached after first resolution -> built once per graph.
+    # Cache (bound, base) model pair PER tier - resolved lazily on first use of
+    # that tier. Building the graph still needs no API key; each tier's chain is
+    # only created when a request actually routes to it, then reused.
     _models: dict = {}
 
-    def _resolve_models():
-        if not _models:
-            from src.core.llm import get_llm
+    def _resolve_models(tier: str):
+        if tier not in _models:
+            from src.core.llm import get_llm_for_tier
 
-            base = get_llm()  # tool-free model for the forced final answer
-            _models["base"] = base
-            _models["bound"] = bind_tools_with_fallback(llm=base, tools=tools)
-        return _models["bound"], _models["base"]
+            base = get_llm_for_tier(tier)  # tool-free model for the forced final answer
+            _models[tier] = (bind_tools_with_fallback(llm=base, tools=tools), base)
+        return _models[tier]
 
     def agent_node(state) -> dict:
-        model, base_model = _resolve_models()
-        history = list(state.get("messages") or [])
         question = state.get("question")
+        # Route by query complexity: trivial turns -> lite (fast/cheap), reasoning
+        # or volatile-lookup turns -> strong. Tools are exposed here, so
+        # date/result/news lookups get the strong model for dependable tool use.
+        tier, why = describe_route(question or "", has_tools=True)
+        logger.info("mentor model tier=%s (%s)", tier, why)
+        model, base_model = _resolve_models(tier)
+        history = list(state.get("messages") or [])
         new_messages = []
         if _should_seed_question(history, question):
             # Fresh user turn (incl. a NEW question on an existing
@@ -391,7 +423,15 @@ def build_tool_agent(
         new_messages.append(resp)
         out: dict = {"messages": new_messages}
         if not getattr(resp, "tool_calls", None):
-            out["answer"] = _content_to_text(getattr(resp, "content", resp))
+            answer = _content_to_text(getattr(resp, "content", resp))
+            # Attribute the answer to the sources the model actually used
+            # (web_search URLs / knowledge_base_search labels). Deterministic,
+            # no extra LLM call - citations land on every grounded answer.
+            citations = citations_from_tool_messages(history)
+            if citations:
+                answer = answer + format_sources(citations)
+            out["answer"] = answer
+            out["citations"] = citations
         return out
 
     def tools_node(state) -> dict:

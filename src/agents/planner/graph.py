@@ -206,3 +206,16 @@ def generate_plan(
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
         yield "⚠️ Plan generation failed. Please try again."
+
+
+def get_plan_meta(goal: str):
+    """Deterministic, code-derived study-plan metadata (StudyPlanMeta).
+
+    Uses the 24h-cached live prelims date when available; pure timeline math
+    lives in src.core.plan_timeline (offline-testable). No LLM call.
+    """
+    from src.core.plan_timeline import compute_plan_timeline, parse_attempt_year
+    today = datetime.now()
+    attempt_year = parse_attempt_year(goal, today)
+    live_date = _fetch_upsc_prelims_date(attempt_year)
+    return compute_plan_timeline(goal, today=today, live_date=live_date or None)

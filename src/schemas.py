@@ -64,6 +64,7 @@ class PlannerRequest(BaseModel):
 
 class PlannerResponse(BaseModel):
     plan: str
+    meta: Optional[dict] = None
 
 
 # ─────────────────────────────────────────
@@ -253,6 +254,37 @@ class BankUploadResponse(BaseModel):
 
 class BankStatusResponse(BaseModel):
     exists: bool
+
+
+# ─────────────────────────────────────────
+# STRUCTURED EVALUATION / PLAN SCHEMAS (#5)
+# ─────────────────────────────────────────
+
+class AnswerEvaluation(BaseModel):
+    """Structured view of a basic answer evaluation (parsed from markdown)."""
+    score: Optional[float] = None
+    max_score: int = 10
+    did_well: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
+
+
+class MainsEvaluation(BaseModel):
+    """Structured view of a mains answer evaluation (parsed from markdown)."""
+    score: Optional[float] = None
+    max_marks: int = 10
+    verdict: Optional[str] = None
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
+
+
+class StudyPlanMeta(BaseModel):
+    """Deterministic, code-derived study-plan metadata (no LLM parsing)."""
+    attempt_year: int
+    months_left: int
+    timeline_msg: str
+    prelims_date: Optional[str] = None
 
 
 class LectureQuestionRequest(BaseModel):

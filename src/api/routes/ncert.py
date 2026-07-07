@@ -5,7 +5,7 @@ NCERT routes - Study sessions and chat
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from src.models.schemas import (
+from src.schemas import (
     NCERTSessionRequest, NCERTSessionResponse,
     NCERTChatRequest, NCERTListResponse
 )
