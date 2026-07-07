@@ -33,6 +33,30 @@ Eight specialised agents, orchestrated by a single **supervisor graph**:
 - 🧠 **Persistent memory** — short-term (per-conversation) + long-term (student profile) across sessions.
 - 🔁 **Self-correcting RAG (CRAG)** — grades retrieved context and falls back to web search when it is weak.
 - 🛡️ **Resilient LLM layer** — Gemini (flash / flash-lite) with Groq fallback.
+- 🧪 **AI reliability checks** — RAG answers include post-generation grounding verification, cautious retrieval-grader fallback, lightweight source notes, and an LLM-as-judge eval report with faithfulness / relevancy / context-precision metrics.
+
+---
+
+## 🧪 AI reliability
+
+This project treats hallucination control as an engineering problem, not only a prompt-writing problem.
+
+Implemented reliability mechanisms:
+
+- **Corrective RAG flow:** retrieval → relevance grading → optional web fallback → answer generation → grounding verification.
+- **Cautious grader fallback:** if retrieval relevance grading fails, the context is treated as unverified instead of being trusted by default.
+- **Grounding confidence:** RAG responses track `high`, `medium`, or `low` grounding confidence internally.
+- **Unsupported-claim tracking:** post-generation verification can flag factual claims not supported by retrieved/web evidence.
+- **Source notes:** when retrieved chunks are available, final RAG answers can include compact source notes instead of fabricated citations.
+- **Eval gate:** `src/eval/llm_eval.py` measures faithfulness, answer relevancy, context precision, and unsupported claim rate.
+
+Run locally:
+
+```bash
+uv run python -m src.eval.llm_eval --report src/eval/eval_report.md
+```
+
+The eval report is a regression signal for AI quality; it is not a guarantee of perfect factual correctness. Expand `src/eval/eval_dataset.json` before using the numbers as production claims.
 
 ---
 

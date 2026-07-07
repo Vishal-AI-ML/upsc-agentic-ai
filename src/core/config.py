@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.core.secret_utils import resolve_jwt_secret
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -145,6 +147,11 @@ class Settings(BaseSettings):
 
         if self.database_url.startswith("postgres://"):
             self.database_url = "postgresql://" + self.database_url[len("postgres://") :]
+
+        # Fail fast on a forgeable JWT secret in production; ephemeral in dev.
+        self.jwt_secret = resolve_jwt_secret(
+            self.jwt_secret, is_production=not self.debug
+        )
 
         return self
 

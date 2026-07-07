@@ -7,7 +7,7 @@ state; the subgraph then loads that collection and answers from it.
 
 Graph flow (Corrective RAG / CRAG)::
 
-    START -> retrieve -> grade -> (web_search?) -> generate -> END
+    START -> retrieve -> grade -> (web_search?) -> generate -> verify_grounding -> END
 
 Nodes:
     retrieve   Load the Chroma collection for ``state['persist_key']`` and run
@@ -19,6 +19,8 @@ Nodes:
     web_search Optional fallback to live web context when retrieval is not
                relevant, re-using the mentor module's search helper.
     generate   Produce a grounded answer, instructed to never fabricate facts.
+    verify_grounding  Check the final answer against available evidence and append
+               a compact trust note (confidence + sources) without fabricating citations.
 
 The default prompt is a generic grounded-RAG template. To preserve an agent's
 bespoke prompt (e.g. NCERT's subject/paper framing), pass that agent's
@@ -31,7 +33,6 @@ import os
 import logging
 from typing import Callable, Literal, Optional
 
-from langchain_chroma import Chroma
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
@@ -41,8 +42,7 @@ from pydantic import BaseModel, Field
 from src.graph.state import AgentState
 from src.core.llm import get_llm, get_fast_llm
 from src.core.vector_store import (
-    get_embeddings,
-    persist_dir_for,
+    load_vector_store,
     similarity_search_with_sources,
 )
 
@@ -81,6 +81,69 @@ def _default_input_builder(state: AgentState) -> dict:
         "context": state.get("kb_context") or "No grounded context found.",
         "web_context": state.get("search_results") or "No web results available.",
     }
+
+
+class GroundingCheck(BaseModel):
+    """Post-generation grounding check for the final answer."""
+
+    confidence: Literal["high", "medium", "low"] = Field(
+        ...,
+        description="High only when the answer is fully supported by supplied evidence; low when evidence is weak or unavailable.",
+    )
+    unsupported_claims: list[str] = Field(
+        default_factory=list,
+        description="Specific factual claims in the answer that are not supported by the supplied evidence.",
+    )
+
+
+_VERIFY_SYS = (
+    "You are a strict grounding verifier for a UPSC RAG assistant. Compare the "
+    "ANSWER against the supplied EVIDENCE. Mark confidence high only when the "
+    "answer is directly supported. Mark medium for partial support or minor "
+    "general UPSC framing. Mark low when evidence is missing, weak, or the answer "
+    "contains unsupported factual claims. List only concrete unsupported claims; "
+    "do not penalize harmless wording, structure, or study advice."
+)
+
+
+def _source_label(chunk: dict) -> str:
+    """Format one retrieved chunk as a user-facing citation label."""
+    metadata = chunk.get("metadata") or {}
+    source_type = metadata.get("source_type") or "retrieved context"
+    title = metadata.get("source_title") or metadata.get("filename") or metadata.get("chapter") or "source"
+    chunk_index = metadata.get("chunk_index")
+    score = chunk.get("score")
+    parts = [str(title)]
+    if source_type:
+        parts.append(f"type={source_type}")
+    if chunk_index is not None:
+        parts.append(f"chunk={chunk_index}")
+    if score is not None:
+        parts.append(f"score={score}")
+    return " — ".join(parts)
+
+
+def _format_sources(citations: list[str | dict]) -> str:
+    """Create compact, user-facing source notes without inventing metadata."""
+    cleaned = [c for c in citations if c]
+    if not cleaned:
+        return ""
+    lines = ["\n\nSources used:"]
+    for i, citation in enumerate(cleaned[:5], start=1):
+        label = _source_label(citation) if isinstance(citation, dict) else str(citation)
+        lines.append(f"- {i}. {label}")
+    return "\n".join(lines)
+
+
+def _format_trust_note(confidence: str, unsupported_claims: list[str]) -> str:
+    """Append a short reliability note only when the answer needs caution."""
+    if confidence == "high" and not unsupported_claims:
+        return ""
+    note = f"\n\nReliability note: grounding confidence is {confidence}."
+    if unsupported_claims:
+        trimmed = unsupported_claims[:3]
+        note += " Potentially unsupported claim(s): " + "; ".join(trimmed)
+    return note
 
 
 # ============================ Structured grader ================================
@@ -152,18 +215,13 @@ def build_rag_subgraph(
             logger.info("[%s] no persist_key on state; skipping retrieval", label)
             return {"kb_context": "", "grounded": False, "citations": []}
 
-        persist_dir = persist_dir_for(persist_key)
-        if not os.path.exists(persist_dir):
-            logger.info("[%s] collection not found: %s", label, persist_dir)
+        db = load_vector_store(persist_key)
+        if db is None:
+            logger.info("[%s] no vector store found for key: %s", label, persist_key)
             return {"kb_context": "", "grounded": False, "citations": []}
 
-        db = Chroma(persist_directory=persist_dir, embedding_function=get_embeddings())
         result = similarity_search_with_sources(db, state["question"], k=k, label=label)
-        citations = [
-            f"chunk (score={c['score']})"
-            for c in result.get("chunks", [])
-            if c.get("score") is not None
-        ]
+        citations = result.get("chunks", [])
         return {
             "kb_context": result.get("context", ""),
             "grounded": result.get("grounded", False),
@@ -189,8 +247,8 @@ def build_rag_subgraph(
             )
             return {"rag_relevant": bool(grade.relevant)}
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("[%s] grade failed (%s); assuming relevant", label, exc)
-            return {"rag_relevant": True}
+            logger.warning("[%s] grade failed (%s); treating context as unverified", label, exc)
+            return {"rag_relevant": False, "grounding_warning": "Retrieval relevance grading failed; context was treated as unverified."}
 
     def route_after_grade(state: AgentState) -> Literal["web_search", "generate"]:
         """Fall back to web search only when context is not relevant."""
@@ -209,13 +267,54 @@ def build_rag_subgraph(
         chain = generate_prompt | get_llm()
         resp = chain.invoke(input_builder(state))
         answer = resp.content if hasattr(resp, "content") else str(resp)
-        return {"answer": answer, "messages": [AIMessage(content=answer)]}
+        return {"answer": answer}
+
+    def verify_grounding_node(state: AgentState) -> dict:
+        """Verify final answer grounding and append compact source/trust notes."""
+        answer = state.get("answer", "")
+        evidence = "\n\n".join(
+            part for part in (state.get("kb_context", ""), state.get("search_results", "")) if part
+        )
+        citations = state.get("citations", []) or []
+        confidence = "high" if state.get("grounded") and state.get("rag_relevant") else "medium"
+        unsupported_claims: list[str] = []
+
+        if not evidence.strip():
+            confidence = "low"
+        else:
+            try:
+                verifier = _structured_llm(GroundingCheck)
+                check = verifier.invoke(
+                    [
+                        ("system", _VERIFY_SYS),
+                        (
+                            "human",
+                            f"QUESTION:\n{state.get('question', '')}\n\n"
+                            f"EVIDENCE:\n{evidence[:6000]}\n\n"
+                            f"ANSWER:\n{answer[:3000]}",
+                        ),
+                    ]
+                )
+                confidence = check.confidence
+                unsupported_claims = list(check.unsupported_claims or [])
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("[%s] grounding verification failed (%s)", label, exc)
+                confidence = "medium" if evidence.strip() else "low"
+
+        final_answer = answer + _format_sources(citations) + _format_trust_note(confidence, unsupported_claims)
+        return {
+            "answer": final_answer,
+            "messages": [AIMessage(content=final_answer)],
+            "grounding_confidence": confidence,
+            "unsupported_claims": unsupported_claims,
+        }
 
     graph = StateGraph(AgentState)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("grade", grade_node)
     graph.add_node("web_search", web_search_node)
     graph.add_node("generate", generate_node)
+    graph.add_node("verify_grounding", verify_grounding_node)
 
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "grade")
@@ -225,7 +324,8 @@ def build_rag_subgraph(
         {"web_search": "web_search", "generate": "generate"},
     )
     graph.add_edge("web_search", "generate")
-    graph.add_edge("generate", END)
+    graph.add_edge("generate", "verify_grounding")
+    graph.add_edge("verify_grounding", END)
     return graph.compile(checkpointer=checkpointer)
 
 

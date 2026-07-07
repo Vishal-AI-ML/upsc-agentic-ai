@@ -56,33 +56,30 @@ Generate now:
 
 
 PARSER_PROMPT = ChatPromptTemplate.from_template("""
-Parse this pasted question text and extract structured data.
+Parse pasted UPSC question text into valid JSON.
 
-The text may be:
-- A single MCQ with options
-- Multiple MCQs
-- A Mains question
-- Mixed format
+Return ONLY a JSON array. No markdown, no commentary, no code fence.
 
-Extract and format as JSON array:
-
+Schema:
 [
-  {{
-    "question": "Full question text",
-    "type": "mcq" or "mains",
-    "options": ["a", "b", "c", "d"] or null,
-    "answer": "correct option" or null,
-    "marks": 10 or null,
-    "topic": "detected topic",
-    "paper": "GS1/GS2/GS3/GS4/Prelims"
-  }}
+  
+    "question": "full question text",
+    "type": "prelims" | "mains",
+    "options": ["option a", "option b", "option c", "option d"] | null,
+    "answer": "correct option or answer text" | null,
+    "explanation": "given explanation if present" | null,
+    "marks": 10 | 15 | null,
+    "topic": "detected topic or null",
+    "paper": "GS1" | "GS2" | "GS3" | "GS4" | "Essay" | "Optional" | "Prelims" | "Unknown"
+  
 ]
 
 RULES:
-- Extract ALL questions from the text
-- Detect topic and paper automatically
-- If answer not given, set to null
-- Clean up formatting issues
+- Extract ALL questions from the pasted text.
+- Preserve the original meaning; clean only formatting noise.
+- If an answer or explanation is not provided, set it to null.
+- For MCQs, options must be an array. For mains, options must be null.
+- Return valid JSON only.
 
 Pasted text:
 {text}

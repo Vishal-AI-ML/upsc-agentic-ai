@@ -16,6 +16,8 @@ import shutil
 import logging
 from typing import Any, Optional
 
+from src.core.retrieval import rerank_scored_documents
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -261,7 +263,7 @@ def upsert_documents(persist_key: str, docs, rebuild: bool = False) -> Optional[
     return store
 
 
-def create_vector_store(text: str, persist_key: str = "") -> Any:
+def create_vector_store(text: str, persist_key: str = "", metadata: Optional[dict] = None) -> Any:
     """
     Create or load a vector store from raw text.
 
@@ -269,6 +271,7 @@ def create_vector_store(text: str, persist_key: str = "") -> Any:
         text: Document text to embed.
         persist_key: Unique key for persistence (e.g. 'ncert_class6_history_ch1').
                      If empty, an ephemeral in-memory store is returned.
+        metadata: Optional source metadata copied onto every chunk.
 
     Behaviour matches the old Chroma version: if a populated store already
     exists for the key, it is loaded and returned as-is (no duplicate indexing).
@@ -280,7 +283,9 @@ def create_vector_store(text: str, persist_key: str = "") -> Any:
         from langchain_chroma import Chroma
 
         logger.info("Creating in-memory vector store")
-        docs = get_text_splitter().create_documents([text])
+        docs = get_text_splitter().create_documents([text], metadatas=[metadata or {}])
+        for i, doc in enumerate(docs):
+            doc.metadata = {**(metadata or {}), **(doc.metadata or {}), "chunk_index": i}
         return Chroma.from_documents(docs, embeddings)
 
     # Idempotent: reuse an already-populated store instead of re-indexing.
@@ -290,7 +295,14 @@ def create_vector_store(text: str, persist_key: str = "") -> Any:
         if existing is not None:
             return existing
 
-    docs = get_text_splitter().create_documents([text])
+    docs = get_text_splitter().create_documents([text], metadatas=[metadata or {}])
+    for i, doc in enumerate(docs):
+        doc.metadata = {
+            "persist_key": persist_key,
+            "chunk_index": i,
+            **(metadata or {}),
+            **(doc.metadata or {}),
+        }
     return upsert_documents(persist_key, docs, rebuild=False)
 
 
@@ -324,19 +336,20 @@ def similarity_search(
         return ""
     try:
         scored = db.similarity_search_with_relevance_scores(q, k=k)
-        relevant = [doc for doc, score in scored if score is not None and score >= threshold]
+        ranked = rerank_scored_documents(scored, q)
+        relevant = [row for row in ranked if row["score"] is not None and row["score"] >= threshold]
         try:
             from src.core import observability
-            observability.log_retrieval_metrics(label, q, k, len(relevant), [s for _, s in scored])
+            observability.log_retrieval_metrics(label, q, k, len(relevant), [row["score"] for row in ranked])
         except Exception:
             pass
         if not relevant:
-            best = max([sc for _, sc in scored], default=0.0) or 0.0
+            best = max([row["score"] or 0.0 for row in ranked], default=0.0) or 0.0
             logger.info(
                 f"No chunks cleared relevance threshold {threshold} (best={best:.3f})"
             )
             return ""
-        return "\n\n".join(doc.page_content for doc in relevant)
+        return "\n\n".join(row["doc"].page_content for row in relevant)
     except Exception as e:
         logger.warning(f"Scored search failed ({e}); falling back to plain search")
         try:
@@ -373,12 +386,18 @@ def similarity_search_with_sources(
         except Exception as e2:
             logger.error(f"Similarity search failed: {e2}")
             return {"context": "", "chunks": [], "grounded": False}
+    ranked = rerank_scored_documents(scored, q)
     chunks = []
-    for doc, score in scored:
+    for row in ranked:
+        score = row["score"]
+        doc = row["doc"]
         if score is None or score >= threshold:
             chunks.append({
                 "excerpt": doc.page_content,
-                "score": round(score, 3) if score is not None else None,
+                "score": score,
+                "lexical_score": row["lexical_score"],
+                "hybrid_score": row["hybrid_score"],
+                "metadata": dict(getattr(doc, "metadata", {}) or {}),
             })
     context = "\n\n".join(c["excerpt"] for c in chunks)
     try:

@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user
 from src.graph.app_graph import make_config
+from src.graph.memory import get_store, load_student_profile, save_student_profile
+from src.graph.profile import extract_student_profile_signals, merge_student_profile
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +60,23 @@ def agent_chat(
     # thread_id to keep multiple independent conversations.
     thread_id = payload.thread_id or f"{user_id}:default"
     config = make_config(thread_id=thread_id, user_id=user_id)
+    store = get_store()
+    profile = load_student_profile(store, user_id)
 
     try:
-        result = agent_graph.invoke({"question": payload.question}, config)
+        result = agent_graph.invoke(
+            {"question": payload.question, "student_context": profile}, config
+        )
     except Exception:
         logger.exception("Agent graph invocation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Agent failed to generate a response",
         )
+
+    updates = extract_student_profile_signals(payload.question)
+    if updates:
+        save_student_profile(store, user_id, merge_student_profile(profile, updates))
 
     return AgentChatResponse(
         response=result.get("answer") or "",
@@ -124,13 +134,15 @@ def agent_chat_stream(
     # conversation memory across sessions; clients may pass an explicit thread_id.
     thread_id = payload.thread_id or f"{user_id}:default"
     config = make_config(thread_id=thread_id, user_id=user_id)
+    store = get_store()
+    profile = load_student_profile(store, user_id)
 
     def generate():
         streamed = False
         final_answer = ""
         try:
             for mode, data in agent_graph.stream(
-                {"question": payload.question},
+                {"question": payload.question, "student_context": profile},
                 config,
                 stream_mode=["messages", "values"],
             ):
@@ -152,5 +164,8 @@ def agent_chat_stream(
         # captured from graph state so the user always receives a response.
         if not streamed and final_answer:
             yield final_answer
+        updates = extract_student_profile_signals(payload.question)
+        if updates:
+            save_student_profile(store, user_id, merge_student_profile(profile, updates))
 
     return StreamingResponse(generate(), media_type="text/plain")

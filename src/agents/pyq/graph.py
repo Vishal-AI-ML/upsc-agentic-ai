@@ -391,7 +391,7 @@ def build_question_bank(file_content: bytes, filename: str, user_id: str) -> dic
 
     docs = get_text_splitter().create_documents([text])
     for d in docs:
-        d.metadata = {"source": filename, "pdf_hash": pdf_hash}
+        d.metadata = {"source_type": "pyq_bank", "source_title": filename, "filename": filename, "pdf_hash": pdf_hash}
 
     # Append to the user's bank collection (auto-created on first upload).
     upsert_documents(_bank_key(user_id), docs, rebuild=False)

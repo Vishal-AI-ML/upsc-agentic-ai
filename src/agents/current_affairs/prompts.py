@@ -86,78 +86,54 @@ Date: {date}
 # ─────────────────────────────────────────
 
 EDITORIAL_PROMPT = ChatPromptTemplate.from_template("""
-You are a senior UPSC analyst writing a deep editorial analysis.
+You are a senior UPSC editorial analyst. Produce an exam-oriented analytical framework, not a fake news report.
 
 Topic: {topic}
 
-Write a thorough, exam-oriented editorial. Use EXACTLY this format:
-
 # 📝 {topic}
 
+## 1. Core Issue
+Explain the issue in 3-4 lines. If the topic depends on recent events, clearly say that exact current details must be verified from a newspaper/PIB/government source.
+
+## 2. UPSC Syllabus Link
 | 📌 GS Paper | GS Paper X — [Subject] |
-| 🔗 Syllabus | [Exact UPSC syllabus point] |
-| ⭐ Importance | High — Prelims + Mains |
+| 🔗 Syllabus | [Closest UPSC syllabus point] |
+| ⭐ Importance | High / Medium — Prelims / Mains / Both |
 
-## 🔍 Setting the Context
-(3-4 lines — what is this issue, why is it in news)
+## 3. Analytical Dimensions
+Give 4-6 dimensions. For each dimension use:
+- **Claim:** one analytical point
+- **Reasoning:** why it matters
+- **Example:** only if it is well-established and you are confident; otherwise write "example to verify before exam"
+- **Use in Mains:** how to convert it into an answer point
 
-## 📊 Core Arguments & Analysis
+## 4. Policy / Governance Angle
+Mention schemes, institutions, articles, committees, reports, or launch years ONLY if you are highly confident. If unsure, write the concept generically and add "verify exact details before using in exam".
 
-### ✅ Positives / Opportunities
-- [Point] — (2-3 lines with data/example)
-- [Point] — (2-3 lines with data/example)
-- [Point] — (2-3 lines with data/example)
-
-### ⚠️ Challenges & Concerns
-- [Challenge] — (specific problem with evidence)
-- [Challenge] — (specific problem with evidence)
-- [Challenge] — (specific problem with evidence)
-
-## 🏛️ India's Policy Response
-- Scheme/Initiative 1 — what it does, when launched, key feature
-- Scheme/Initiative 2 — what it does, when launched, key feature
-- Scheme/Initiative 3 — what it does, when launched, key feature
-
-## 🌍 Global Comparison
-(How other countries handle this — 2-3 examples)
-
-## 🎯 Way Forward
+## 5. Way Forward
 1. Short-term measure
 2. Medium-term reform
-3. Long-term vision
+3. Long-term institutional change
 
-## ✍️ Mains Answer Framework
-
+## 6. Mains Answer Framework
 **Probable 15-mark question:**
-> [Write the actual probable mains question]
+> [Write a realistic analytical question]
 
 **Answer outline:**
 - Introduction:
-- Body Para 1:
-- Body Para 2:
-- Body Para 3:
-- Conclusion:
+- Body dimension 1:
+- Body dimension 2:
+- Body dimension 3:
+- Way forward / Conclusion:
 
-**10-mark probable question:**
-> [Write a shorter probable question]
+## 7. Facts to Verify Before Exam
+List only the facts a student should verify before writing them in an answer. Do not invent exact data here.
 
-## 📌 Key Terms & Concepts
-| Term | Meaning |
-|------|---------|
-| Term 1 | Clear definition |
-| Term 2 | Clear definition |
-| Term 3 | Clear definition |
-
-## ⭐ Must-Remember Facts
-- Fact with number/data
-- Fact with number/data
-- Fact with number/data
-
-ACCURACY RULES (critical - no hallucination):
-- This is an analytical editorial built from general understanding, NOT a live news feed. The thinking framework, arguments, and structure are the main value.
-- Do NOT fabricate precise statistics, scheme launch dates, budget figures, ranks, or report names. If you are not certain of an exact number/date/name, describe it qualitatively (e.g. "a recent government report") and tell the student to verify it.
-- Better to give fewer solid points than many invented ones - it is fine to write fewer bullets in a section.
-- Mark any illustrative or approximate figure clearly with "(verify)".
+ACCURACY RULES — critical:
+- This output is an analytical framework from general understanding, NOT a live-news or source-cited report.
+- Do NOT fabricate statistics, launch dates, budget figures, ranks, committee/report names, quotes, or current-year claims.
+- Prefer strong analysis with fewer facts over fake factual density.
+- If exact evidence is needed, explicitly tell the student what to verify.
 """)
 
 # ─────────────────────────────────────────

@@ -122,7 +122,7 @@ Output EXACTLY this format:
 # ─────────────────────────────────────────
 
 MAINS_MODEL_PROMPT = ChatPromptTemplate.from_template("""
-You are a UPSC Mains topper writing a model answer.
+You are a UPSC Mains topper writing a safe, high-quality model answer.
 
 **Question ({marks} marks):** {question}
 
@@ -132,9 +132,11 @@ You are a UPSC Mains topper writing a model answer.
 
 **Rules:**
 - Flowing prose only — NO bullet points
-- Structure: Introduction → Body (multiple analytical dimensions) → Way Forward/Conclusion
-- Include specific facts, schemes, articles, examples
-- Every sentence must add value
+- Structure: Introduction → Body with multiple analytical dimensions → Way Forward/Conclusion
+- Use only well-established facts, constitutional concepts, schemes, articles, or examples that you are confident about
+- Do NOT invent statistics, committee/report names, launch dates, article numbers, scheme details, or current-year claims
+- If an exact fact would require verification, avoid the exact number/date and write the point conceptually
+- Every sentence must add value for a UPSC answer
 
 Write the model answer now:
 """)

@@ -49,3 +49,7 @@ Thumbs.db
 node_modules/
 mobile/node_modules/
 mobile/android/
+*.zip
+README_PATCH.md
+tree.txt
+clean-ai-upgrade.patch

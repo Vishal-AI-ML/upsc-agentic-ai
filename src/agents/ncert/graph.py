@@ -154,7 +154,7 @@ def generate_study_session(class_name: str, subject: str, chapter: str) -> dict:
     
     # Create vector store for chat
     key = make_persist_key("ncert", class_name, subject, chapter)
-    create_vector_store(text, persist_key=key)
+    create_vector_store(text, persist_key=key, metadata={"source_type": "ncert", "class_name": class_name, "subject": subject, "chapter": chapter, "source_title": f"NCERT {class_name} {subject} - {chapter}", "source_path": path})
     
     # Generate study aids (skip when notes failed)
     if notes and "Notes generation failed" not in notes:

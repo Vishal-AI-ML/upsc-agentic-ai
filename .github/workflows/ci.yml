@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_llm_eval:
+        description: "Run live LLM-as-judge eval"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+  schedule:
+    # Nightly live LLM-as-judge eval (02:00 UTC).
+    - cron: "0 2 * * *"
+
+jobs:
+  tests:
+    name: Offline quality gate
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ci-only-dummy-secret-not-for-production-32
+      REQUIRE_EMAIL_VERIFICATION: "true"
+      GOOGLE_API_KEY: ""
+      GROQ_API_KEY: ""
+      LANGFUSE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Syntax check changed AI modules
+        run: |
+          uv run python -m py_compile \
+            src/graph/rag_graph.py src/graph/state.py src/graph/profile.py \
+            src/core/retrieval.py src/core/vector_store.py \
+            src/eval/llm_eval.py \
+            src/api/routes/chat.py
+      - name: Run offline tests
+        run: uv run pytest -q
+
+  llm-eval:
+    name: Live LLM-as-judge faithfulness gate
+    needs: tests
+    runs-on: ubuntu-latest
+    # Live eval requires model/vector DB secrets, so it runs only nightly or when manually requested.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_llm_eval == 'true')
+    env:
+      JWT_SECRET: ci-only-dummy-secret-not-for-production-32
+      REQUIRE_EMAIL_VERIFICATION: "true"
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      LANGFUSE_ENABLED: ${{ vars.LANGFUSE_ENABLED || 'false' }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST || 'https://cloud.langfuse.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Run LLM-as-judge eval with report
+        run: uv run python -m src.eval.llm_eval --gate 0.9 --report src/eval/eval_report.md
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-eval-report
+          path: src/eval/eval_report.md
+          if-no-files-found: ignore

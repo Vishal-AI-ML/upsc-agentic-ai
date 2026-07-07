@@ -82,11 +82,13 @@ When to start, how to analyze, score targets.
 - Which monthly magazine
 - How to link CA to static syllabus
 
-## 🎯 Honest Probability Assessment
+## 🎯 Readiness Risk Assessment
 Given {months_left} months, {hours} hrs/day, attempt {attempt_number}, weak in {weak}:
-- Realistic probability of clearing Prelims
-- What will make the difference
-- One honest sentence about this attempt
+- Risk band: Low / Medium / High risk — do NOT give a fake percentage
+- Evidence used: months left, daily hours, attempt number, weak areas
+- Missing evidence: mock scores, syllabus coverage, revision cycles, accuracy rate
+- What will reduce the risk band over the next 30 days
+- One honest sentence about this attempt without demotivating the student
 
 ## ✅ Next 7 Days — Day by Day
 Day 1 ({today}): exact chapter, book, task
@@ -101,5 +103,6 @@ RULES:
 - Every book must include full name and author
 - Every week must have a revision day
 - No sentence without an action or fact
+- Do NOT invent a numeric probability of selection/clearing without mock-score evidence
 - Tone: senior who cleared UPSC talking to junior who hasn't
 """)

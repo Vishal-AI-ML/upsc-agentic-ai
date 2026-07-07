@@ -36,6 +36,9 @@ class AgentState(TypedDict, total=False):
     grounded: bool                     # True when retrieval cleared the relevance threshold.
     rag_relevant: bool                 # CRAG grade: context actually answers the question.
     search_results: str                # Live web search context (fallback).
+    grounding_warning: str             # Warning when retrieval grading/checking fails.
 
     # --- Output ---
     answer: str                        # Final generated answer.
+    grounding_confidence: str          # high | medium | low post-generation grounding confidence.
+    unsupported_claims: list[str]      # Claims not supported by retrieved/web evidence.

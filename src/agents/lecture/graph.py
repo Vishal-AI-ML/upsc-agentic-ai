@@ -11,6 +11,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.core.llm import get_llm
 from src.core.observability import trace_config
+from src.core.prompt_safety import harden_untrusted
 from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for, vector_store_exists
 from src.agents.lecture.prompts import (
     TRANSLATE_PROMPT, TOPIC_PROMPT, NOTES_PROMPT, CHAT_PROMPT
@@ -221,7 +222,7 @@ def _detect_topic(text: str) -> dict:
     """Detect lecture topic and UPSC relevance."""
     try:
         chain = TOPIC_PROMPT | get_llm()
-        res = chain.invoke({"text": text[:4000]}, config=trace_config("topic-detect")).content
+        res = chain.invoke({"text": harden_untrusted(text[:4000], label="lecture transcript")}, config=trace_config("topic-detect")).content
         result = {
             "topic": "Unknown",
             "paper": "Unknown",
@@ -314,7 +315,7 @@ def _build_from_transcript(transcript: str, lang: str, video_id: str, medium: st
     try:
         chain = NOTES_PROMPT | get_llm()
         notes = chain.invoke({
-            "text": text_for_notes,
+            "text": harden_untrusted(text_for_notes, label="lecture transcript"),
             "topic": topic_info["topic"],
             "paper": topic_info["paper"],
             "syllabus": topic_info["syllabus"],
@@ -368,7 +369,7 @@ def build_lecture_chat_index(video_id: str, transcript: str) -> None:
         key = make_persist_key("lecture", video_id)
         if vector_store_exists(key):
             return
-        create_vector_store(transcript, persist_key=key)
+        create_vector_store(transcript, persist_key=key, metadata={"source_type": "lecture", "source_title": f"YouTube lecture {video_id}", "video_id": video_id})
         logger.info(f"Lecture chat index ready: {video_id}")
     except Exception as e:
         logger.warning(f"Lecture chat index build failed for {video_id}: {e}")
@@ -513,7 +514,7 @@ def ask_lecture(
     try:
         chain = CHAT_PROMPT | get_llm()
         for chunk in chain.stream({
-            "context": ctx,
+            "context": harden_untrusted(ctx, label="lecture excerpts"),
             "question": question.strip(),
             "topic": topic,
             "paper": paper,

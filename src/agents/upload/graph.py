@@ -10,6 +10,7 @@ from functools import lru_cache
 from pypdf import PdfReader
 
 from src.core.llm import get_llm
+from src.core.prompt_safety import harden_untrusted
 from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for
 from src.agents.upload.prompts import (
     BOOK_DETECTION_PROMPT, NOTES_PROMPT, CHAT_PROMPT
@@ -79,7 +80,7 @@ def detect_book(text: str) -> dict:
     """Detect if PDF is a known UPSC book."""
     try:
         chain = BOOK_DETECTION_PROMPT | get_llm()
-        res = chain.invoke({"text": text[:2000]}).content
+        res = chain.invoke({"text": harden_untrusted(text[:2000], label="uploaded document")}).content
         
         result = {
             "book": "Unknown",
@@ -162,7 +163,7 @@ def process_upload(file_content: bytes, filename: str) -> dict:
     try:
         chain = NOTES_PROMPT | get_llm()
         notes = chain.invoke({
-            "text": text_for_notes,
+            "text": harden_untrusted(text_for_notes, label="uploaded document"),
             "book_name": book_info["book"],
             "subject": book_info["subject"],
             "paper": book_info["paper"],
@@ -176,7 +177,7 @@ def process_upload(file_content: bytes, filename: str) -> dict:
     
     # Create vector store for chat
     key = make_persist_key("upload", pdf_hash)
-    create_vector_store(text, persist_key=key)
+    create_vector_store(text, persist_key=key, metadata={"source_type": "upload", "source_title": filename, "filename": filename, "pdf_hash": pdf_hash, "book": book_info.get("book"), "subject": book_info.get("subject"), "paper": book_info.get("paper")})
     
     # Cache result
     result = {
@@ -229,7 +230,7 @@ def ask_upload(
     try:
         chain = CHAT_PROMPT | get_llm()
         for chunk in chain.stream({
-            "context": ctx,
+            "context": harden_untrusted(ctx, label="document excerpts"),
             "question": question.strip(),
             "book_name": book_name,
             "subject": subject,
