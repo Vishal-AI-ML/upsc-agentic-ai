@@ -54,26 +54,3 @@ README_PATCH.md
 tree.txt
 clean-ai-upgrade.patch
 
-# secrets
-.env
-*.env
-!.env.example
-
-# python
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.egg-info/
-.pytest_cache/
-
-# local data / heavy (RAM+disk bachao)
-chroma_db/
-data/
-*.sqlite
-*.db
-
-# ide/os
-.vscode/
-.idea/
-.DS_Store
