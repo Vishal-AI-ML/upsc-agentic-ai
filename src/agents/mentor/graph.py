@@ -1,25 +1,26 @@
 """
-Mentor Agent - Intent detection, Tavily search, streaming responses
+Mentor helpers - trusted-source web search + student-context formatting.
+
+The mentor "brain" itself is now the canonical tool-calling agent
+(``src/graph/tools.build_tool_agent``, wired via
+``src/graph/mentor_graph.build_mentor_graph``). The model decides its own tool
+use, so the old hand-rolled intent-detection + ``mentor_reply`` streaming
+pipeline was removed in the P1 dual-stack merge.
+
+What remains here are the reusable helpers the rest of the stack still imports:
+
+* ``_fetch_search_context`` - trusted-source web-search digest, used by the
+  ``web_search`` tool (``src/graph/tools.py``) and the RAG subgraph.
+* ``_build_student_context`` - formats a student profile for the mentor prompt,
+  used by ``mentor_graph._mentor_context``.
+
+Only the standard library is imported at module load; all heavy/optional
+dependencies (Tavily, DuckDuckGo, Settings) are imported lazily inside the
+functions, so importing this module stays cheap and side-effect-free.
 """
-
-import re
 import logging
-import time as _time
-from datetime import datetime
-
-from src.core.llm import get_llm
-from src.agents.mentor.prompts import (
-    CASUAL_PROMPT, VAGUE_PROMPT, EMOTIONAL_PROMPT, MENTOR_PROMPT
-)
-from src.core import mentor_kb
 
 logger = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────
-# SEARCH TOOL — lazy init
-# ─────────────────────────────────────────
-
-_search_tool = None
 
 # Official / trusted sources for live UPSC facts (dates, notifications, etc.)
 TRUSTED_DOMAINS = [
@@ -27,10 +28,21 @@ TRUSTED_DOMAINS = [
     "thehindu.com", "indianexpress.com", "drishtiias.com",
 ]
 
+_search_tool = None
+
 
 def _get_search_tool():
     global _search_tool
     if _search_tool is None:
+        # Bridge the key from Settings (.env) into os.environ so libraries
+        # like langchain_tavily / community Tavily (which read the env var
+        # directly, not our Settings object) can find it. setdefault keeps
+        # any real exported env var as the source of truth.
+        import os as _os
+        from src.core.config import settings as _settings
+        _tavily_key = (_settings.tavily_api_key or "").strip()
+        if _tavily_key:
+            _os.environ.setdefault("TAVILY_API_KEY", _tavily_key)
         try:
             from langchain_tavily import TavilySearch
             try:
@@ -52,94 +64,6 @@ def _get_search_tool():
             return None
     return _search_tool
 
-
-# ─────────────────────────────────────────
-# NEWS CACHE — refresh every 6 hours
-# ─────────────────────────────────────────
-
-_news_cache = {"content": "", "timestamp": 0}
-
-def _fetch_latest_upsc_news() -> str:
-    if _time.time() - _news_cache["timestamp"] < 21600:
-        return _news_cache["content"]
-    try:
-        tool = _get_search_tool()
-        if not tool:
-            return _duckduckgo_search("latest UPSC CSE notification schedule")
-        results = tool.invoke("latest UPSC CSE 2026 notification schedule update")
-        if not results:
-            return ""
-        content = results[0].get("content", "")[:600]
-        _news_cache["content"] = content
-        _news_cache["timestamp"] = _time.time()
-        return content
-    except Exception as e:
-        logger.warning(f"News fetch failed: {e}")
-        return ""
-
-
-# ─────────────────────────────────────────
-# INTENT DETECTION PATTERNS
-# ─────────────────────────────────────────
-
-CASUAL_PATTERNS = [
-    r"^(hi|hello|hey|hii|helo|hye|sup|yo|good morning|good evening|good night|gm|gn)[\s!.,]*$",
-    r"^(kya haal|kaise ho|kaisa hai|kya chal raha|how are you|what's up|wassup)[\s!.,?]*$",
-    r"^(thanks|thank you|shukriya|dhanyawad|thx|ty)[\s!.,]*$",
-    r"^(ok|okay|theek hai|accha|acha|hmm|hm|ohh|oh)[\s!.,]*$",
-    r"^(bye|goodbye|alvida|see you|cya)[\s!.,]*$",
-]
-
-VAGUE_PATTERNS = [
-    r"^exam\s*20\d\d[\s!.,?]*$",
-    r"^upsc\s*20\d\d[\s!.,?]*$",
-    r"^(strategy|plan|help|guide me|kya karu|kya karun)[\s!.,?]*$",
-    r"^(book|books|resource|resources)[\s!.,?]*$",
-    r"^(syllabus)[\s!.,?]*$",
-]
-
-SEARCH_TRIGGER_PATTERNS = [
-    r"\bdate\b", r"\bschedule\b", r"\bnotification\b", r"\bwhen\b",
-    r"\bprelims\b", r"\bmains\b", r"\binterview\b", r"\bresult\b",
-    r"\bcutoff\b", r"\bcut.?off\b", r"\bvacancy\b", r"\bpost\b",
-    r"\btopper\b", r"\brank\b", r"\bsyllabus change\b", r"\bupsc 20\d\d\b",
-]
-
-EMOTIONAL_PATTERNS = [
-    r"\b(stressed|anxiety|depressed|giving up|quit|fail|hopeless|scared)\b",
-    r"\b(rone ka|rona|haar gaya|thak gaya|chhod dun|chhod du)\b",
-    r"\b(demotivated|demoralised|tired|exhausted|burned out)\b",
-]
-
-
-def _is_casual(q: str) -> bool:
-    return any(re.match(p, q.strip().lower()) for p in CASUAL_PATTERNS)
-
-def _is_vague(q: str) -> bool:
-    return any(re.match(p, q.strip().lower()) for p in VAGUE_PATTERNS)
-
-def _needs_search(q: str) -> bool:
-    return any(re.search(p, q.lower()) for p in SEARCH_TRIGGER_PATTERNS)
-
-def _is_emotional(q: str) -> bool:
-    return any(re.search(p, q.lower()) for p in EMOTIONAL_PATTERNS)
-
-
-def detect_intent(question: str) -> str:
-    """Detect user intent from question."""
-    q = question.strip().lower()
-    if _is_casual(q):
-        return "casual"
-    if _is_vague(q):
-        return "vague"
-    if _is_emotional(q):
-        return "emotional"
-    return "full"
-
-
-# ─────────────────────────────────────────
-# SEARCH
-# ─────────────────────────────────────────
 
 def _duckduckgo_search(question: str) -> str:
     # Free, keyless fallback when Tavily is unavailable or returns nothing.
@@ -182,10 +106,6 @@ def _fetch_search_context(question: str) -> str:
         return ""
 
 
-# ─────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────
-
 def _build_student_context(ctx: dict | None) -> str:
     if not ctx:
         return "No profile yet — infer from the question."
@@ -201,121 +121,3 @@ def _build_student_context(ctx: dict | None) -> str:
     }
     lines = [f"- {k}: {v}" for k, v in fields.items() if v]
     return "\n".join(lines) if lines else "No profile yet — infer from the question."
-
-
-def _format_chat_history(history: list | None) -> str:
-    if not history:
-        return "No previous conversation."
-    recent = history[-6:]
-    lines = []
-    for m in recent:
-        role = "Student" if m["role"] == "user" else "Arjun"
-        lines.append(f"{role}: {m['content'][:200]}")
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────
-# MAIN FUNCTION — streaming
-# ─────────────────────────────────────────
-
-def mentor_reply(
-    question: str,
-    student_context: dict | None = None,
-    chat_history: list | None = None,
-):
-    """
-    Streaming generator — yields response chunks.
-    """
-    if not question or not question.strip():
-        yield "Ask me something — I'm here!"
-        return
-
-    question = question.strip()
-    current_date = datetime.now().strftime("%B %d, %Y")
-    llm = get_llm()
-
-    # ── Casual ──
-    if _is_casual(question):
-        try:
-            latest_news = _fetch_latest_upsc_news()
-            yield "\x1fR:casual\x1f"
-            chain = CASUAL_PROMPT | llm
-            for chunk in chain.stream({
-                "question": question,
-                "latest_news": latest_news or "No major updates right now.",
-                "current_date": current_date,
-            }):
-                if hasattr(chunk, "content"):
-                    yield chunk.content
-        except Exception as e:
-            logger.error(f"Casual reply failed: {e}")
-            yield "Hey! Good to have you here. What's on your mind?"
-        return
-
-    # ── Vague ──
-    if _is_vague(question):
-        try:
-            yield "\x1fR:vague\x1f"
-            chain = VAGUE_PROMPT | llm
-            for chunk in chain.stream({"question": question}):
-                if hasattr(chunk, "content"):
-                    yield chunk.content
-        except Exception as e:
-            logger.error(f"Vague reply failed: {e}")
-            yield "Can you be a bit more specific? What exactly do you want to know?"
-        return
-
-    # ── Emotional ──
-    if _is_emotional(question):
-        try:
-            yield "\x1fR:emotional\x1f"
-            chain = EMOTIONAL_PROMPT | llm
-            for chunk in chain.stream({
-                "question": question,
-                "current_date": current_date,
-            }):
-                if hasattr(chunk, "content"):
-                    yield chunk.content
-        except Exception as e:
-            logger.error(f"Emotional reply failed: {e}")
-            yield "Hey, it's okay to feel this way. Take a breath. What's going on?"
-        return
-
-    # ── Full mentor mode ──
-    # Always consult the persistent background knowledge base (verified facts +
-    # topper strategies). It is invisible to the user; we only pull from it on
-    # demand when the question actually matches stored knowledge.
-    kb_context = "No matching background knowledge."
-    try:
-        kb = mentor_kb.search_kb(question, k=4)
-        if kb.get("context"):
-            kb_context = kb["context"]
-    except Exception as e:
-        logger.warning(f"Mentor KB lookup failed: {e}")
-
-    # Only hit the live web for volatile, current-year specifics.
-    search_results = ""
-    if _needs_search(question):
-        search_results = _fetch_search_context(question)
-        if search_results:
-            logger.info(f"Live search injected for: {question[:60]}")
-
-    try:
-        _grounded = kb_context != "No matching background knowledge."
-        _web = bool(search_results)
-        _route = "grounded+web" if (_grounded and _web) else ("grounded" if _grounded else ("web" if _web else "mentor"))
-        yield "\x1fR:" + _route + "\x1f"
-        chain = MENTOR_PROMPT | llm
-        for chunk in chain.stream({
-            "question": question,
-            "current_date": current_date,
-            "student_context": _build_student_context(student_context),
-            "chat_history": _format_chat_history(chat_history),
-            "kb_context": kb_context,
-            "search_results": search_results or "No live search data — for exact dates/cut-offs/vacancies, verify at upsc.gov.in.",
-        }):
-            if hasattr(chunk, "content"):
-                yield chunk.content
-    except Exception as e:
-        logger.error(f"Mentor reply failed: {e}")
-        yield "Something went wrong — please try again in a moment."

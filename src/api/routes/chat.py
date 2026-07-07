@@ -86,7 +86,9 @@ def agent_chat(
 
 # Nodes that emit the final, user-facing answer. Streaming is filtered to these
 # so internal routing/grading LLM calls never leak into the response stream.
-_FINAL_NODES = {"generate", "planner", "evaluator", "current_affairs"}
+# "agent" is the canonical mentor tool-calling brain's answer node; its
+# tool-deciding turns carry no content, so only the final answer streams.
+_FINAL_NODES = {"generate", "planner", "evaluator", "current_affairs", "agent"}
 
 
 def _chunk_text(content) -> str:
