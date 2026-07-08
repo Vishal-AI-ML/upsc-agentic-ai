@@ -28,13 +28,14 @@ from pydantic import BaseModel, Field
 
 from src.graph.state import AgentState
 from src.core.llm import get_fast_llm
-from src.graph.mentor_graph import build_mentor_graph
+from src.graph.mentor_graph import build_mentor_graph, _mentor_context
 from src.graph.rag_graph import build_rag_subgraph
 from src.graph.agent_subgraphs import (
     build_planner_subgraph,
     build_evaluator_subgraph,
     build_current_affairs_subgraph,
 )
+from src.graph.plan_execute import build_plan_execute_graph, is_complex
 
 logger = logging.getLogger(__name__)
 
@@ -91,25 +92,50 @@ def build_supervisor(checkpointer=None, store=None):
     evaluator = build_evaluator_subgraph()
     current_affairs = build_current_affairs_subgraph()
 
+    # Plan-and-execute (#7): optional upgrade for complex, multi-part mentor
+    # queries. Off by default (extra LLM calls); when enabled, complex mentor
+    # turns are routed to a decompose -> execute -> synthesize subgraph.
+    plan_execute_on = False
+    plan_execute_min_words = 30
+    try:
+        from src.core.config import settings
+        plan_execute_on = bool(settings.plan_execute_enabled)
+        plan_execute_min_words = int(settings.plan_execute_min_words)
+    except Exception:  # pragma: no cover - settings present in app
+        plan_execute_on = False
+    plan_execute = (
+        build_plan_execute_graph(extra_context=_mentor_context)
+        if plan_execute_on
+        else None
+    )
+
     def supervisor_node(state: AgentState) -> dict:
         # Respect an explicitly forced route (e.g. from the UI).
         forced = state.get("route")
         if forced in _ROUTES:
-            return {"route": forced}
-        try:
-            decision = _structured_llm(RouteDecision).invoke(
-                [("system", _SUP_SYS), ("human", state.get("question", ""))]
-            )
-            return {"route": decision.route}
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Supervisor routing failed (%s); defaulting to mentor", exc)
-            return {"route": "mentor"}
+            route = forced
+        else:
+            try:
+                decision = _structured_llm(RouteDecision).invoke(
+                    [("system", _SUP_SYS), ("human", state.get("question", ""))]
+                )
+                route = decision.route
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("Supervisor routing failed (%s); defaulting to mentor", exc)
+                route = "mentor"
+        # Upgrade complex mentor turns to plan-and-execute when enabled.
+        if (
+            route == "mentor"
+            and plan_execute_on
+            and is_complex(state.get("question", ""), min_words=plan_execute_min_words)
+        ):
+            route = "plan_execute"
+        return {"route": route}
 
-    def route_selector(
-        state: AgentState,
-    ) -> Literal["mentor", "planner", "evaluator", "current_affairs", "rag"]:
+    def route_selector(state: AgentState) -> str:
         route = state.get("route", "mentor")
-        return route if route in _ROUTES else "mentor"
+        valid = _ROUTES + (("plan_execute",) if plan_execute_on else ())
+        return route if route in valid else "mentor"
 
     graph = StateGraph(AgentState)
     graph.add_node("supervisor", supervisor_node)
@@ -118,14 +144,18 @@ def build_supervisor(checkpointer=None, store=None):
     graph.add_node("planner", planner)
     graph.add_node("evaluator", evaluator)
     graph.add_node("current_affairs", current_affairs)
+    if plan_execute is not None:
+        graph.add_node("plan_execute", plan_execute)
+
+    routes = _ROUTES + (("plan_execute",) if plan_execute is not None else ())
 
     graph.add_edge(START, "supervisor")
     graph.add_conditional_edges(
         "supervisor",
         route_selector,
-        {name: name for name in _ROUTES},
+        {name: name for name in routes},
     )
-    for name in _ROUTES:
+    for name in routes:
         graph.add_edge(name, END)
     return graph.compile(checkpointer=checkpointer, store=store)
 

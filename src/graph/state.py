@@ -42,3 +42,11 @@ class AgentState(TypedDict, total=False):
     answer: str                        # Final generated answer.
     grounding_confidence: str          # high | medium | low post-generation grounding confidence.
     unsupported_claims: list[str]      # Claims not supported by retrieved/web evidence.
+
+    # --- Reflection / self-critique (#7) ---
+    critique_score: int                # Last self-critique score (1-10).
+    revision_count: int                # How many reflect->revise passes ran.
+
+    # --- Plan-and-execute (#7) ---
+    plan_steps: list[str]              # Decomposed sub-questions (planner output).
+    step_results: list[dict]           # Per-step {step, result} from the executor.

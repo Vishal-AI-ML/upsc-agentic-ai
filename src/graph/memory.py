@@ -140,11 +140,18 @@ def get_store():
         except Exception as exc:  # pragma: no cover - depends on env
             logger.warning("Postgres store unavailable (%s); using in-memory", exc)
 
-    from langgraph.store.memory import InMemoryStore
+    try:
+        from langgraph.store.memory import InMemoryStore
 
-    logger.info("Store: in-memory (NOT persistent)")
-    _store = InMemoryStore()
-    return _store
+        logger.info("Store: in-memory (NOT persistent)")
+        _store = InMemoryStore()
+        return _store
+    except Exception as exc:  # pragma: no cover - depends on env
+        logger.warning(
+            "In-memory store unavailable (%s); running without long-term store", exc
+        )
+        _store = None
+        return _store
 
 
 def close_memory() -> None:

@@ -128,6 +128,39 @@ class Settings(BaseSettings):
     # Require email verification before login (strict). Set REQUIRE_EMAIL_VERIFICATION=false in .env to disable.
     require_email_verification: bool = True
 
+    # Response cache (Upstash Redis, REST) - skip re-running the agent graph for
+    # a repeated identical question -> lower latency + LLM cost.
+    # Empty creds OR response_cache_enabled=false => cache is a no-op (app unchanged).
+    #   Free DB: https://console.upstash.com -> Redis -> REST API (URL + TOKEN)
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
+    response_cache_enabled: bool = False
+    response_cache_ttl_seconds: int = 86400   # 24h
+    response_cache_scope: str = "thread"       # thread | user | global
+
+    # Reflection / self-critique (#7). After generation, a critic scores the
+    # answer and (when weak) a bounded revise pass rewrites it. Fail-open: any
+    # critic error keeps the original answer. reflection_enabled=false restores
+    # the previous single-pass behaviour.
+    reflection_enabled: bool = True
+    reflection_min_score: int = 7          # 1-10; below this triggers a revise
+    reflection_max_revisions: int = 1      # bounded loop (cost + latency guard)
+
+    # Plan-and-execute (#7). For genuinely complex, multi-part questions the
+    # mentor path can decompose -> execute each sub-step -> synthesize. OFF by
+    # default because it issues several extra LLM calls (latency + free-tier
+    # quota). Enable with PLAN_EXECUTE_ENABLED=true.
+    plan_execute_enabled: bool = False
+    plan_execute_min_words: int = 30       # complexity gate (aligns w/ model_router)
+    plan_execute_max_steps: int = 5        # cap sub-steps (cost guard)
+
+    # MCP (Model Context Protocol) server - expose KB/tools to external MCP
+    # clients (Claude Desktop, Cursor, other agents). Opt-in; when disabled
+    # no MCP dependency loads and app boot is unchanged.
+    mcp_enabled: bool = False
+    mcp_transport: str = "stdio"   # "stdio" (local desktop) | "http"/"sse" (remote)
+    mcp_http_path: str = "/mcp"    # mount path when served over HTTP inside FastAPI
+
     @model_validator(mode="after")
     def _normalize_env_values(self):
         """Clean secrets/URLs pasted into hosting dashboards.
@@ -147,6 +180,7 @@ class Settings(BaseSettings):
             "google_api_key", "groq_api_key", "tavily_api_key",
             "jwt_secret", "langfuse_public_key", "langfuse_secret_key",
             "langfuse_host", "embedding_model",
+            "upstash_redis_rest_url", "upstash_redis_rest_token",
         ):
             setattr(self, field_name, _clean(getattr(self, field_name)))
 

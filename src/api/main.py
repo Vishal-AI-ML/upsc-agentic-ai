@@ -90,6 +90,15 @@ app.add_middleware(RateLimitMiddleware)
 # -------------------------------------------------------------------
 app.add_middleware(MaxUploadSizeMiddleware)
 
+# Optional MCP server mount (opt-in via MCP_ENABLED). No-op + no dependency
+# loaded when disabled; never let MCP wiring break app boot.
+try:
+    from src.mcp_server import mount_mcp
+
+    mount_mcp(app)
+except Exception as _mcp_exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning("MCP mount skipped: %s", _mcp_exc)
+
 
 # -------------------------------------------------------------------
 # GLOBAL EXCEPTION HANDLER

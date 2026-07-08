@@ -66,6 +66,7 @@ from src.core.grounding import (
 
 # Re-use the mentor module's web search helper for the CRAG fallback.
 from src.agents.mentor.graph import _fetch_search_context
+from src.graph.reflection import make_reflect_node
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,7 @@ def build_rag_subgraph(
     k: int = 5,
     allow_web_fallback: bool = True,
     checkpointer=None,
+    enable_reflection: Optional[bool] = None,
 ):
     """Build and compile a reusable Corrective-RAG subgraph.
 
@@ -185,6 +187,26 @@ def build_rag_subgraph(
             web search before generation.
         checkpointer: Optional LangGraph checkpointer for conversation memory.
     """
+
+    # Resolve reflection settings lazily (graph build must not require app env).
+    reflect_min_score, reflect_max_revisions = 7, 1
+    _reflect = enable_reflection
+    try:
+        from src.core.config import settings as _settings
+        if _reflect is None:
+            _reflect = bool(_settings.reflection_enabled)
+        reflect_min_score = int(_settings.reflection_min_score)
+        reflect_max_revisions = int(_settings.reflection_max_revisions)
+    except Exception:  # pragma: no cover - settings present in app
+        if _reflect is None:
+            _reflect = False
+
+    def _evidence_of(state: AgentState) -> str:
+        return "\n\n".join(
+            part
+            for part in (state.get("kb_context", ""), state.get("search_results", ""))
+            if part
+        )
 
     def retrieve_node(state: AgentState) -> dict:
         """Load the active Chroma collection and run a relevance-scored search."""
@@ -308,6 +330,15 @@ def build_rag_subgraph(
     graph.add_node("grade", grade_node)
     graph.add_node("web_search", web_search_node)
     graph.add_node("generate", generate_node)
+    if _reflect:
+        graph.add_node(
+            "reflect",
+            make_reflect_node(
+                evidence_getter=_evidence_of,
+                min_score=reflect_min_score,
+                max_revisions=reflect_max_revisions,
+            ),
+        )
     graph.add_node("verify_grounding", verify_grounding_node)
 
     graph.add_edge(START, "retrieve")
@@ -318,7 +349,11 @@ def build_rag_subgraph(
         {"web_search": "web_search", "generate": "generate"},
     )
     graph.add_edge("web_search", "generate")
-    graph.add_edge("generate", "verify_grounding")
+    if _reflect:
+        graph.add_edge("generate", "reflect")
+        graph.add_edge("reflect", "verify_grounding")
+    else:
+        graph.add_edge("generate", "verify_grounding")
     graph.add_edge("verify_grounding", END)
     return graph.compile(checkpointer=checkpointer)
 

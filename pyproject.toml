@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.14.0",
+    "mcp>=1.2.0",
     "bcrypt>=5.0.0",
     "chromadb>=1.5.9",
     "duckduckgo-search>=8.1.1",
