@@ -22,3 +22,10 @@ def test_ci_uses_named_secrets_not_placeholder_values():
     assert 'secrets.GOOGLE_API_KEY' in text
     assert 'secrets.QDRANT_URL' in text
     assert '$ secrets.GOOGLE_API_KEY ' not in text
+
+
+def test_live_smoke_job_present():
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'smoke-live:' in text
+    assert 'tests/test_smoke_live.py' in text
+    assert 'LIVE_BASE_URL' in text

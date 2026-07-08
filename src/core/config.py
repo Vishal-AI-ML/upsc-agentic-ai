@@ -137,6 +137,11 @@ class Settings(BaseSettings):
     response_cache_enabled: bool = False
     response_cache_ttl_seconds: int = 86400   # 24h
     response_cache_scope: str = "thread"       # thread | user | global
+    # Semantic (embedding-similarity) cache: paraphrased questions reuse an
+    # existing answer. Opt-in; exact-match behaviour is unchanged when off.
+    response_cache_semantic: bool = False
+    response_cache_semantic_threshold: float = 0.92  # cosine >= this => hit
+    response_cache_semantic_max_index: int = 200     # per-scope index cap
 
     # Reflection / self-critique (#7). After generation, a critic scores the
     # answer and (when weak) a bounded revise pass rewrites it. Fail-open: any

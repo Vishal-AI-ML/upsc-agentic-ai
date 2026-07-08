@@ -1,23 +1,31 @@
 """Response cache backed by Upstash Redis (REST).
 
-Skips re-running the full agent graph when the SAME question is asked again in
-the same conversation, cutting both latency and LLM cost for repeats/retries.
+Skips re-running the full agent graph when the SAME (or a semantically similar)
+question is asked again, cutting both latency and LLM cost for repeats/retries.
 
 Design goals
 ------------
 * **Zero new dependency** - talks to Upstash's REST endpoint with ``httpx``
   (already a project dependency). No local Redis server, so it is safe on a
   small (8 GB) box and on free-tier hosting.
-* **Fail-open** - any cache error (network, timeout, bad payload) is swallowed
-  and treated as a miss, so the cache can never break a chat request.
+* **Fail-open** - any cache error (network, timeout, bad payload, embedding
+  failure) is swallowed and treated as a miss, so the cache can never break a
+  chat request.
 * **No-op when unconfigured** - if ``RESPONSE_CACHE_ENABLED`` is false or the
   Upstash creds are empty, every call is a cheap no-op and behaviour is
   identical to before (so existing tests / deployments are unaffected).
 * **Correctness-first scoping** - the cache key includes the conversation
   scope (thread by default), so a cached answer is only ever reused for the
-  exact same question in the exact same context. This avoids serving one
-  user's personalised answer to another, or leaking context across
-  conversations.
+  same question in the same context. This avoids serving one user's
+  personalised answer to another, or leaking context across conversations.
+
+Lookup is two-stage:
+    1. **Exact match** (fast, always on) - normalised-question SHA-256 key.
+    2. **Semantic match** (opt-in via ``RESPONSE_CACHE_SEMANTIC``) - on an
+       exact miss, embed the question and cosine-compare it against a small
+       per-scope index of recent questions; a hit above the threshold reuses
+       that stored answer. This makes "What is Article 21?" and "explain
+       article 21" share one cached answer, lifting the hit-rate a lot.
 
 Scope options (``RESPONSE_CACHE_SCOPE``):
     "thread" (default) - key per (thread, question); safest, reuses on retries
@@ -30,8 +38,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
-from typing import Any, Optional
+from typing import Any, Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +60,36 @@ def _normalize(question: str) -> str:
     return q.rstrip(_TRAILING)
 
 
+def _scope_part(scope: str, user_id: str, thread_id: str) -> str:
+    """Return the scope discriminator used in both cache and index keys."""
+    if scope == "user":
+        return f"u:{user_id}"
+    if scope == "global":
+        return "g"
+    return f"t:{thread_id}"  # "thread" (default / fallback)
+
+
 def _cache_key(scope: str, user_id: str, thread_id: str, question: str) -> str:
     """Build a stable, collision-resistant cache key for the given scope."""
     digest = hashlib.sha256(_normalize(question).encode("utf-8")).hexdigest()
-    if scope == "user":
-        scope_part = f"u:{user_id}"
-    elif scope == "global":
-        scope_part = "g"
-    else:  # "thread" (default / fallback)
-        scope_part = f"t:{thread_id}"
-    return f"respcache:v1:{scope_part}:{digest}"
+    return f"respcache:v1:{_scope_part(scope, user_id, thread_id)}:{digest}"
+
+
+def _index_key(scope: str, user_id: str, thread_id: str) -> str:
+    """Redis list key holding the per-scope semantic index."""
+    return f"respcache:idx:v1:{_scope_part(scope, user_id, thread_id)}"
+
+
+def _cosine(a: List[float], b: List[float]) -> float:
+    """Cosine similarity of two equal-length vectors (0.0 on any degeneracy)."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
 
 
 class ResponseCache:
@@ -75,6 +104,10 @@ class ResponseCache:
         ttl_seconds: int = 86400,
         scope: str = "thread",
         timeout: float = 2.0,
+        semantic: bool = False,
+        semantic_threshold: float = 0.92,
+        semantic_max_index: int = 200,
+        embed_fn: Optional[Callable[[str], List[float]]] = None,
     ) -> None:
         self.rest_url = (rest_url or "").rstrip("/")
         self.rest_token = rest_token or ""
@@ -83,13 +116,47 @@ class ResponseCache:
         self.ttl_seconds = ttl_seconds
         self.scope = scope if scope in ("thread", "user", "global") else "thread"
         self.timeout = timeout
+        self.semantic = bool(semantic)
+        self.semantic_threshold = float(semantic_threshold)
+        self.semantic_max_index = int(semantic_max_index)
+        self._embed_fn = embed_fn
+
+    # -- embeddings -------------------------------------------------------
+    def _embed(self, text: str) -> Optional[List[float]]:
+        """Return an embedding vector, or None on any failure (fail-open).
+
+        The project's Gemini embedder is imported lazily so this module stays
+        import-safe and unit-testable without the model/API key loaded. Tests
+        inject a deterministic ``embed_fn`` instead.
+        """
+        try:
+            if self._embed_fn is None:
+                from src.core.vector_store import get_embeddings
+
+                self._embed_fn = get_embeddings().embed_query
+            return self._embed_fn(text)
+        except Exception:  # fail-open: no embedding == no semantic match
+            logger.debug("response cache embed failed", exc_info=True)
+            return None
 
     # -- public API -------------------------------------------------------
     def get(self, *, user_id: str, thread_id: str, question: str) -> Optional[dict]:
-        """Return the cached ``{"answer", "route"}`` dict, or None on miss."""
+        """Return the cached ``{"answer", "route"}`` dict, or None on miss.
+
+        Tries an exact-match lookup first, then (if enabled) a semantic one.
+        """
         if not self.enabled:
             return None
         key = _cache_key(self.scope, user_id, thread_id, question)
+        hit = self._get_raw(key)
+        if hit is not None:
+            return hit
+        if self.semantic:
+            return self._semantic_get(user_id, thread_id, question)
+        return None
+
+    def _get_raw(self, key: str) -> Optional[dict]:
+        """GET one cache key and decode it into a valid answer dict, or None."""
         try:
             raw = self._redis_command(["GET", key])
         except Exception:  # fail-open: any error == miss
@@ -103,6 +170,37 @@ class ResponseCache:
             return None
         if isinstance(data, dict) and data.get("answer"):
             return data
+        return None
+
+    def _semantic_get(
+        self, user_id: str, thread_id: str, question: str
+    ) -> Optional[dict]:
+        """Embedding-similarity fallback: reuse the nearest stored answer."""
+        try:
+            q_emb = self._embed(_normalize(question))
+            if not q_emb:
+                return None
+            idx_key = _index_key(self.scope, user_id, thread_id)
+            raw_entries = self._redis_command(["LRANGE", idx_key, "0", "-1"]) or []
+            best_key: Optional[str] = None
+            best_sim = 0.0
+            for raw in raw_entries:
+                try:
+                    entry = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+                sim = _cosine(q_emb, entry.get("emb") or [])
+                if sim > best_sim:
+                    best_sim, best_key = sim, entry.get("key")
+            if best_key and best_sim >= self.semantic_threshold:
+                data = self._get_raw(best_key)
+                if data is not None:
+                    data = dict(data)
+                    data["cache"] = "semantic"
+                    data["similarity"] = round(best_sim, 4)
+                    return data
+        except Exception:  # fail-open
+            logger.debug("response cache semantic GET failed", exc_info=True)
         return None
 
     def set(
@@ -123,6 +221,27 @@ class ResponseCache:
             self._redis_command(["SET", key, payload, "EX", str(self.ttl_seconds)])
         except Exception:  # fail-open: never break the request path
             logger.debug("response cache SET failed", exc_info=True)
+            return
+        if self.semantic:
+            self._semantic_index(user_id, thread_id, question, key)
+
+    def _semantic_index(
+        self, user_id: str, thread_id: str, question: str, key: str
+    ) -> None:
+        """Best-effort: append this question's embedding to the scope index."""
+        try:
+            emb = self._embed(_normalize(question))
+            if not emb:
+                return
+            idx_key = _index_key(self.scope, user_id, thread_id)
+            entry = json.dumps({"key": key, "emb": [round(float(x), 6) for x in emb]})
+            self._redis_command(["LPUSH", idx_key, entry])
+            # Cap the index so it stays small and cheap to scan.
+            self._redis_command(
+                ["LTRIM", idx_key, "0", str(self.semantic_max_index - 1)]
+            )
+        except Exception:  # fail-open: indexing never breaks a request
+            logger.debug("response cache semantic index failed", exc_info=True)
 
     # -- transport --------------------------------------------------------
     def _redis_command(self, command: list) -> Any:
@@ -159,12 +278,16 @@ def get_response_cache() -> ResponseCache:
             rest_token=settings.upstash_redis_rest_token,
             ttl_seconds=settings.response_cache_ttl_seconds,
             scope=settings.response_cache_scope,
+            semantic=settings.response_cache_semantic,
+            semantic_threshold=settings.response_cache_semantic_threshold,
+            semantic_max_index=settings.response_cache_semantic_max_index,
         )
         if _cache_singleton.enabled:
             logger.info(
-                "Response cache ON (scope=%s, ttl=%ss)",
+                "Response cache ON (scope=%s, ttl=%ss, semantic=%s)",
                 _cache_singleton.scope,
                 _cache_singleton.ttl_seconds,
+                _cache_singleton.semantic,
             )
     return _cache_singleton
 
