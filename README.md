@@ -79,32 +79,55 @@ A LangGraph **supervisor** routes each question to the right specialist agent. T
 
 ## 🏗️ Architecture
 
-```text
-              ┌────────────────────────────────────────────┐
-  Client ───▶ │  FastAPI (src/api/main.py : app)             │
-  (Vercel     │   • JWT auth + refresh   • rate limiting      │
-   frontend)  │   • CORS  • global error handler → Sentry     │
-              └───────────────┬──────────────────────────┘
-                              │
-                     ┌────────▼─────────┐   response cache (Upstash)
-                     │ LangGraph        │◀─ exact + semantic lookup
-                     │ supervisor       │
-                     └───┬───────────┬──┘
-            route ───────┘           └─────── memory (per-thread profile)
-              │
-   ┌──────────▼───────────┐        ┌───────────────────────┐
-   │ 8 specialist agents   │──RAG──▶│ Vector store          │
-   │ (see table above)     │        │  Qdrant (prod) /      │
-   └──────────┬───────────┘        │  Chroma (local)       │
-              │                     └───────────────────────┘
-     reflection + eval gate                 │
-              │                        Gemini embeddings
-     LLM: Gemini ▶ Groq fallback
-              │
-     traces ──▶ Langfuse    errors ──▶ Sentry
+```mermaid
+flowchart TD
+    Client["🌐 Client<br/>Vercel frontend"] --> API["⚙️ FastAPI · src/api/main.py:app<br/>JWT auth + refresh · rate limiting<br/>CORS · global error handler"]
+
+    API --> SUP["🧭 LangGraph supervisor"]
+    SUP <--> Cache[("⚡ Response cache · Upstash<br/>exact + semantic lookup")]
+    SUP <--> Mem[("🧠 Memory<br/>per-thread profile")]
+
+    SUP -->|route| Agents["🤖 8 specialist agents"]
+    Agents -->|RAG| VS[("📚 Vector store<br/>Qdrant prod · Chroma local")]
+    Emb["✳️ Gemini embeddings"] -.-> VS
+
+    Agents --> Eval["🪞 Reflection + eval gate"]
+    Eval --> LLM["🧠 LLM · Gemini → Groq fallback"]
+
+    LLM -. traces .-> LF["📊 Langfuse"]
+    API -. errors .-> Sentry["🚨 Sentry"]
+
+    classDef store fill:#eef2ff,stroke:#6366f1,color:#1e1b4b;
+    class Cache,Mem,VS store;
 ```
 
----
+<details>
+<summary>Text version (for renderers without Mermaid)</summary>
+
+```text
+Client (Vercel frontend)
+        |
+        v
+FastAPI (src/api/main.py:app)
+  - JWT auth + refresh  - rate limiting  - CORS  - errors -> Sentry
+        |
+        v
+LangGraph supervisor  <->  Response cache (Upstash: exact + semantic)
+        |               <->  Memory (per-thread profile)
+        | route
+        v
+8 specialist agents  --RAG-->  Vector store (Qdrant / Chroma)  <--  Gemini embeddings
+        |
+        v
+Reflection + eval gate
+        |
+        v
+LLM: Gemini -> Groq fallback
+        |
+   traces -> Langfuse        errors -> Sentry
+```
+
+</details>
 
 ## 🔎 How the RAG pipeline works
 
