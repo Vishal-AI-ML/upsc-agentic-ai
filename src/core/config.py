@@ -161,6 +161,15 @@ class Settings(BaseSettings):
     mcp_transport: str = "stdio"   # "stdio" (local desktop) | "http"/"sse" (remote)
     mcp_http_path: str = "/mcp"    # mount path when served over HTTP inside FastAPI
 
+    # Error monitoring - Sentry (empty SENTRY_DSN => disabled, app unchanged).
+    # Free Developer plan: 5K errors/month. FastAPI + Starlette integrations
+    # auto-enable. Fail-open: any init error never blocks app boot.
+    #   Free project + DSN: https://sentry.io  (create a Python -> FastAPI project)
+    sentry_dsn: str = ""
+    sentry_environment: str = "production"
+    sentry_traces_sample_rate: float = 0.0   # perf tracing off by default (cost)
+    sentry_profiles_sample_rate: float = 0.0
+
     @model_validator(mode="after")
     def _normalize_env_values(self):
         """Clean secrets/URLs pasted into hosting dashboards.
@@ -181,6 +190,7 @@ class Settings(BaseSettings):
             "jwt_secret", "langfuse_public_key", "langfuse_secret_key",
             "langfuse_host", "embedding_model",
             "upstash_redis_rest_url", "upstash_redis_rest_token",
+            "sentry_dsn", "sentry_environment",
         ):
             setattr(self, field_name, _clean(getattr(self, field_name)))
 

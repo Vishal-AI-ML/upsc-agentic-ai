@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.core.config import settings
 from src.core.logging_config import setup_logging
 from src.core import observability
+from src.core.error_monitoring import init_sentry, sentry_enabled
 from src.core.db import init_db
 from src.core.vector_store import ensure_vector_storage
 from src.core.email_utils import smtp_configured
@@ -28,6 +29,9 @@ from src.api.routes import (
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# Error monitoring (Sentry). No-op when SENTRY_DSN is unset; fail-open on error.
+init_sentry()
+
 
 # -------------------------------------------------------------------
 # LIFESPAN
@@ -39,6 +43,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"\U0001f4cd API Prefix: {settings.api_prefix}")
     logger.info(f"\U0001f527 Debug Mode: {settings.debug}")
     logger.info(f"\U0001f4ca Langfuse: {observability.langfuse_enabled()}")
+    logger.info(f"\U0001f6a8 Sentry: {sentry_enabled()}")
     init_db()
     ensure_vector_storage()
     # Build the LangGraph supervisor once (checkpointer + long-term store wired)
