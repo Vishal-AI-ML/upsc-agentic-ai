@@ -18,10 +18,22 @@ logger = logging.getLogger(__name__)
 # Normalize the URL so it survives copy/paste into host dashboards (Render etc.):
 #   * strip stray whitespace and surrounding quotes
 #   * upgrade the legacy "postgres://" scheme that SQLAlchemy 2.0 no longer accepts
-_raw_db_url = (settings.database_url or "").strip().strip('"').strip("'")
-if _raw_db_url.startswith("postgres://"):
-    _raw_db_url = "postgresql://" + _raw_db_url[len("postgres://") :]
-_db_url = _raw_db_url or "sqlite:///./upsc_app.db"
+def get_database_url() -> str:
+    """Return the normalized DATABASE_URL (or the local SQLite fallback).
+
+    Shared by the engine below and by Alembic's ``migrations/env.py`` so the
+    app and migrations always target the same database + URL scheme:
+      * strip stray whitespace / surrounding quotes (hosting dashboards add them)
+      * upgrade the legacy ``postgres://`` scheme SQLAlchemy 2.0 rejects
+      * fall back to a local SQLite file when DATABASE_URL is unset
+    """
+    raw = (settings.database_url or "").strip().strip('"').strip("'")
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://") :]
+    return raw or "sqlite:///./upsc_app.db"
+
+
+_db_url = get_database_url()
 
 # SQLite needs check_same_thread=False to work with FastAPI's threadpool.
 _connect_args = {"check_same_thread": False} if _db_url.startswith("sqlite") else {}

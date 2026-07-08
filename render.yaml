@@ -24,7 +24,9 @@ services:
     buildCommand: "pip install uv && uv sync --frozen"
 
     # Bind to Render's injected $PORT. host 0.0.0.0 is required on Render.
-    startCommand: "uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT"
+    # Apply DB migrations (idempotent) before booting so the schema is always
+    # current on deploy. `alembic upgrade head` is a no-op when up to date.
+    startCommand: "uv run alembic upgrade head && uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT"
 
     # Render pings this to decide if a deploy is healthy.
     healthCheckPath: /health
