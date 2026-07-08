@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     jwt_secret: str = ""                      # .env se aayega
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440   # 24 hours
+    # Refresh token validity (minutes) - default 30 days. Access tokens can
+    # stay short-lived because a long-lived, ROTATING & REVOCABLE refresh
+    # token (see /auth/refresh + /auth/logout) keeps sessions alive. Lower
+    # access_token_expire_minutes to ~30 once the frontend wires up refresh.
+    refresh_token_expire_minutes: int = 43200  # 30 days
 
     # Email (SMTP) - password reset links.
     # Empty SMTP creds => reset link is logged to the server console instead of emailed (dev).

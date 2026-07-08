@@ -28,7 +28,11 @@ config = context.config
 # fall back to the app's normalized DATABASE_URL.
 _cfg_url = config.get_main_option("sqlalchemy.url")
 url = _cfg_url or get_database_url()
-config.set_main_option("sqlalchemy.url", url)
+# ConfigParser (used under the hood by set_main_option) treats "%" as
+# interpolation syntax, so a URL-encoded password like "%40" ("@") would raise
+# "invalid interpolation syntax". Escape "%" -> "%%" for the stored copy; the
+# raw ``url`` variable below is what we actually connect with.
+config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -10,6 +10,9 @@ from src.core.users import (
     authenticate, create_user, get_user_by_email, set_password,
 )
 from src.core.security import create_access_token
+from src.core.refresh_tokens import (
+    issue_refresh_token, rotate_refresh_token, revoke_refresh_token,
+)
 from src.core.reset_tokens import create_reset_token, consume_reset_token
 from src.core.verification_tokens import (
     create_verification_token, consume_verification_token,
@@ -30,11 +33,16 @@ class RegisterRequest(BaseModel):
     name: str = ""
 
 
-def _token_for(user) -> dict:
+def _token_for(db: Session, user) -> dict:
     token = create_access_token(
         {"sub": user.id, "email": user.email, "name": user.name}
     )
-    return {"access_token": token, "token_type": "bearer"}
+    refresh = issue_refresh_token(db, user.id)
+    return {
+        "access_token": token,
+        "refresh_token": refresh,
+        "token_type": "bearer",
+    }
 
 
 def _frontend_link(param: str, raw_token: str) -> str:
@@ -76,7 +84,7 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
     # Verification disabled (dev): mark verified and auto-login.
     user.email_verified = True
     db.commit()
-    return _token_for(user)
+    return _token_for(db, user)
 
 
 @router.post("/login")
@@ -97,13 +105,55 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Check your inbox for the verification link, or request a new one.",
         )
-    return _token_for(user)
+    return _token_for(db, user)
 
 
 @router.get("/me")
 async def me(current_user: dict = Depends(get_current_user)):
     """Return the currently logged-in user."""
     return current_user
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
+    """Rotate a valid refresh token into a fresh access + refresh pair.
+
+    The presented refresh token is single-use: it is revoked and replaced on
+    every call (rotation), so a stolen-and-reused token is detected and denied.
+    """
+    rotated = rotate_refresh_token(db, body.refresh_token)
+    if not rotated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user_id, new_refresh = rotated
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token. Please sign in again.",
+        )
+    access = create_access_token(
+        {"sub": user.id, "email": user.email, "name": user.name}
+    )
+    return {
+        "access_token": access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/logout")
+async def logout(body: RefreshRequest, db: Session = Depends(get_db)):
+    """Revoke a refresh token (sign out this device/session)."""
+    revoke_refresh_token(db, body.refresh_token)
+    return {"message": "Logged out."}
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -183,7 +233,7 @@ async def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
         user.email_verified = True
         db.commit()
         db.refresh(user)
-    data = _token_for(user)
+    data = _token_for(db, user)
     data["message"] = "Email verified successfully. You are now signed in."
     return data
 

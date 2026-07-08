@@ -2,7 +2,8 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
@@ -88,6 +89,25 @@ app.add_middleware(RateLimitMiddleware)
 # MAX UPLOAD SIZE (reject files larger than max_upload_mb)
 # -------------------------------------------------------------------
 app.add_middleware(MaxUploadSizeMiddleware)
+
+
+# -------------------------------------------------------------------
+# GLOBAL EXCEPTION HANDLER
+# -------------------------------------------------------------------
+# Catch-all for *unhandled* exceptions so the API always returns a clean JSON
+# envelope and never leaks a stack trace to the client. FastAPI's own handlers
+# for HTTPException (401/403/404/...) and request validation (422) still run
+# as normal; this only fires for unexpected 500-class errors, which are logged
+# server-side with the request method + path for debugging.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception(
+        "Unhandled error on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again."},
+    )
 
 
 # -------------------------------------------------------------------
