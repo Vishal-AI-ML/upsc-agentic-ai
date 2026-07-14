@@ -16,7 +16,12 @@ import shutil
 import logging
 from typing import Any, Optional
 
-from src.core.retrieval import rerank_scored_documents
+from src.core.retrieval import (
+    rerank_scored_documents,
+    cross_encoder_rerank,
+    expand_queries,
+    generate_hypothetical_document,
+)
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -36,16 +41,126 @@ SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.3"))
 # --------------------------------------------------------------------------- #
 # Embeddings + text splitting (backend-agnostic)
 # --------------------------------------------------------------------------- #
-def get_embeddings() -> GoogleGenerativeAIEmbeddings:
-    """Get cached embeddings instance."""
+def _make_gemini_embeddings():
+    """Gemini API embeddings (settings.embedding_model)."""
+    return GoogleGenerativeAIEmbeddings(
+        model=settings.embedding_model,
+        google_api_key=settings.google_api_key,
+    )
+
+
+def _make_local_embeddings():
+    """Offline FastEmbed embeddings - zero API, zero quota.
+
+    Needs the optional `fastembed` package (uv add fastembed). Small ONNX
+    models (e.g. BAAI/bge-small-en-v1.5, 384d) run on CPU with no torch.
+    """
+    try:
+        from langchain_community.embeddings import FastEmbedEmbeddings
+    except ImportError as e:
+        raise ImportError(
+            "EMBEDDING_PROVIDER=local needs FastEmbed. Run: uv add fastembed"
+        ) from e
+    kwargs = {"model_name": settings.local_embedding_model}
+    if settings.fastembed_cache_dir:
+        kwargs["cache_dir"] = settings.fastembed_cache_dir
+    return FastEmbedEmbeddings(**kwargs)
+
+
+def _make_ollama_embeddings():
+    """Local Ollama server embeddings - open-source models, zero API cost.
+
+    Needs a running Ollama server and a pulled model, e.g.:
+        ollama pull nomic-embed-text
+    Models come from the Ollama registry (NOT HuggingFace), which helps when
+    HuggingFace is blocked on the network.
+    """
+    try:
+        from langchain_ollama import OllamaEmbeddings  # newer, non-deprecated
+    except ImportError:
+        try:
+            from langchain_community.embeddings import OllamaEmbeddings
+        except ImportError as e:
+            raise ImportError(
+                "EMBEDDING_PROVIDER=ollama needs a running Ollama server plus "
+                "langchain-ollama (uv add langchain-ollama) or langchain-community. "
+                "Install Ollama, then: ollama pull " + settings.ollama_embedding_model
+            ) from e
+    return OllamaEmbeddings(
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_embedding_model,
+    )
+
+
+def _make_openai_compat_embeddings():
+    """Cloud embeddings via any OpenAI-compatible /v1 endpoint (e.g. NVIDIA
+    nv-embedqa). Reachable even when HuggingFace is blocked - a great fit when
+    Gemini embedding quota is exhausted AND local FastEmbed downloads fail.
+    Needs: uv add langchain-openai.
+    """
+    if not (settings.openai_embed_base_url and settings.openai_embed_model):
+        raise ValueError(
+            "EMBEDDING_PROVIDER=openai_compat needs OPENAI_EMBED_BASE_URL and "
+            "OPENAI_EMBED_MODEL (and usually OPENAI_EMBED_API_KEY)."
+        )
+    try:
+        from langchain_openai import OpenAIEmbeddings
+    except ImportError as e:
+        raise ImportError(
+            "EMBEDDING_PROVIDER=openai_compat needs: uv add langchain-openai"
+        ) from e
+    return OpenAIEmbeddings(
+        model=settings.openai_embed_model,
+        base_url=settings.openai_embed_base_url,
+        api_key=settings.openai_embed_api_key or "not-needed",
+        check_embedding_ctx_length=False,
+    )
+
+
+def get_embeddings():
+    """Get the cached embeddings instance for the configured provider.
+
+    IMPORTANT: a vector index MUST be built and queried with the SAME embedding
+    model - different models have different dimensions and vector spaces, so
+    mixing them corrupts search. This is a single per-process singleton driven
+    by EMBEDDING_PROVIDER, so build + query stay consistent. Switching providers
+    requires rebuilding affected collections.
+
+    Providers:
+      - "gemini" (default): settings.embedding_model via the Gemini API.
+      - "local"/"fastembed": offline FastEmbed (no quota); needs `fastembed`.
+      - "ollama": local Ollama server (open-source models, non-HF download).
+      - "openai_compat"/"nvidia": cloud OpenAI-compatible embeddings (e.g.
+        NVIDIA nv-embedqa) - reachable when HuggingFace is blocked.
+    """
     global _embeddings_instance
     if _embeddings_instance is None:
-        _embeddings_instance = GoogleGenerativeAIEmbeddings(
-            model=settings.embedding_model,
-            google_api_key=settings.google_api_key,
-        )
-        logger.info(f"Embeddings initialized: {settings.embedding_model}")
+        provider = (settings.embedding_provider or "gemini").strip().lower()
+        if provider in ("local", "fastembed"):
+            _embeddings_instance = _make_local_embeddings()
+            logger.info(
+                f"Embeddings initialized: local FastEmbed / {settings.local_embedding_model}"
+            )
+        elif provider == "ollama":
+            _embeddings_instance = _make_ollama_embeddings()
+            logger.info(
+                f"Embeddings initialized: ollama / {settings.ollama_embedding_model}"
+            )
+        elif provider in ("openai_compat", "openai", "nvidia", "cloud"):
+            _embeddings_instance = _make_openai_compat_embeddings()
+            logger.info(
+                f"Embeddings initialized: openai_compat / {settings.openai_embed_model}"
+            )
+        else:
+            _embeddings_instance = _make_gemini_embeddings()
+            logger.info(f"Embeddings initialized: gemini / {settings.embedding_model}")
     return _embeddings_instance
+
+
+def reset_embeddings() -> None:
+    """Drop the cached embeddings singleton (e.g. after changing provider)."""
+    global _embeddings_instance
+    _embeddings_instance = None
 
 
 def get_text_splitter() -> RecursiveCharacterTextSplitter:
@@ -307,6 +422,87 @@ def create_vector_store(text: str, persist_key: str = "", metadata: Optional[dic
 
 
 # --------------------------------------------------------------------------- #
+# Advanced candidate gathering: multi-query (RAG-Fusion) + HyDE
+# --------------------------------------------------------------------------- #
+def _doc_key(doc) -> str:
+    """Stable identity for a chunk so multi-query pools can be de-duplicated."""
+    md = getattr(doc, "metadata", {}) or {}
+    persist_key = md.get("persist_key", "")
+    chunk_index = md.get("chunk_index")
+    if chunk_index is not None:
+        return f"{persist_key}:{chunk_index}"
+    return f"content:{hash(getattr(doc, 'page_content', '') or '')}"
+
+
+def _plain_scored_search(db: Any, query: str, k: int) -> list:
+    """One scored search, falling back to unscored search on error."""
+    try:
+        return db.similarity_search_with_relevance_scores(query, k=k)
+    except Exception:
+        docs = db.similarity_search(query, k=k)
+        return [(d, None) for d in docs]
+
+
+def gather_scored_documents(db: Any, query: str, k: int) -> list:
+    """Collect (doc, score) candidates, applying multi-query + HyDE when enabled.
+
+    Behaviour is controlled by settings and is FULLY FAIL-OPEN:
+      * multi_query_enabled -> the query is paraphrased into N variants and every
+        variant is searched; the candidate pools are merged (best score wins per
+        chunk), widening recall for short/abbreviated queries.
+      * hyde_enabled -> a hypothetical answer is generated and searched too, so
+        the dense arm benefits from answer-style text.
+    When both are off (default) this is exactly one plain scored search, so the
+    prior behaviour is unchanged. The merged pool is later re-ranked against the
+    ORIGINAL query by rerank_scored_documents, so expansion never changes what
+    "relevant" means -- it only adds more candidates to choose from.
+    """
+    queries: list[str] = [query]
+    try:
+        if settings.multi_query_enabled:
+            queries = expand_queries(query, n=settings.multi_query_count) or [query]
+        if settings.hyde_enabled:
+            hyde = generate_hypothetical_document(query)
+            if hyde:
+                queries.append(hyde)
+    except Exception as e:  # noqa: BLE001 - fail-open
+        logger.warning(f"query expansion failed ({e}); using original query only")
+        queries = [query]
+
+    if len(queries) == 1:
+        return _plain_scored_search(db, query, k)
+
+    merged: dict[str, tuple] = {}
+    order: list[str] = []
+    for q in queries:
+        for doc, score in _plain_scored_search(db, q, k):
+            key = _doc_key(doc)
+            if key not in merged:
+                merged[key] = (doc, score)
+                order.append(key)
+            else:
+                _, prev = merged[key]
+                if (score if score is not None else -1.0) > (prev if prev is not None else -1.0):
+                    merged[key] = (doc, score)
+    return [merged[key] for key in order]
+
+
+def _maybe_cross_encoder(query: str, ranked: list) -> list:
+    """Apply the optional cross-encoder precision pass. FAIL-OPEN no-op when off."""
+    if not settings.rerank_enabled:
+        return ranked
+    return cross_encoder_rerank(
+        query,
+        ranked,
+        provider=settings.rerank_provider,
+        model=settings.rerank_model,
+        top_n=settings.rerank_top_n,
+        cohere_api_key=settings.cohere_api_key,
+        cohere_model=settings.cohere_rerank_model,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Searching (works on any LangChain vector store: Qdrant or Chroma)
 # --------------------------------------------------------------------------- #
 def similarity_search(
@@ -335,8 +531,8 @@ def similarity_search(
     if not q:
         return ""
     try:
-        scored = db.similarity_search_with_relevance_scores(q, k=k)
-        ranked = rerank_scored_documents(scored, q)
+        scored = gather_scored_documents(db, q, k)
+        ranked = _maybe_cross_encoder(q, rerank_scored_documents(scored, q))
         relevant = [row for row in ranked if row["score"] is not None and row["score"] >= threshold]
         try:
             from src.core import observability
@@ -377,7 +573,7 @@ def similarity_search_with_sources(
     if not q:
         return {"context": "", "chunks": [], "grounded": False}
     try:
-        scored = db.similarity_search_with_relevance_scores(q, k=k)
+        scored = gather_scored_documents(db, q, k)
     except Exception as e:
         logger.warning(f"Scored search failed ({e}); falling back to plain search")
         try:
@@ -386,7 +582,7 @@ def similarity_search_with_sources(
         except Exception as e2:
             logger.error(f"Similarity search failed: {e2}")
             return {"context": "", "chunks": [], "grounded": False}
-    ranked = rerank_scored_documents(scored, q)
+    ranked = _maybe_cross_encoder(q, rerank_scored_documents(scored, q))
     chunks = []
     for row in ranked:
         score = row["score"]

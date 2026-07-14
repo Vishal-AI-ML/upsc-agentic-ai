@@ -20,6 +20,7 @@ import logging
 from langchain_core.messages import AIMessage
 from langgraph.graph import StateGraph, START, END
 
+from src.core.config import settings
 from src.graph.state import AgentState
 from src.agents.planner.graph import generate_plan
 from src.agents.evaluator.graph import evaluate_answer, evaluate_mains
@@ -38,12 +39,53 @@ def _consume(generator) -> str:
     return "".join(parts)
 
 
+def _maybe_interrupt_for_params(params: dict, required: list[str], reason: str) -> dict:
+    """Human-in-the-loop (#4): pause to collect missing params, then resume.
+
+    When ``hitl_enabled`` is on and any ``required`` param is missing/blank, the
+    graph is paused via LangGraph ``interrupt`` with a small payload describing
+    what is needed. The resume-capable client answers with a dict of values,
+    which is merged back into ``params``. FAIL-OPEN: if HITL is off, interrupts
+    are unsupported (no checkpointer), or anything else goes wrong, the original
+    params are returned unchanged so the node still runs.
+
+    NOTE: ``interrupt`` raises a special control-flow signal (GraphInterrupt)
+    that MUST propagate for pause/resume to work, so it is intentionally NOT
+    swallowed here; only the import/guard path is defensive.
+    """
+    if not settings.hitl_enabled:
+        return params
+    missing = [f for f in required if not str(params.get(f, "")).strip()]
+    if not missing:
+        return params
+    from langgraph.types import interrupt  # lazy: only needed when HITL is on
+
+    provided = interrupt(
+        {
+            "type": "missing_params",
+            "reason": reason,
+            "missing": missing,
+            "have": {k: v for k, v in params.items() if v not in (None, "")},
+        }
+    )
+    if isinstance(provided, dict):
+        return {**params, **provided}
+    return params
+
+
 # ============================ Planner =========================================
 def build_planner_subgraph(checkpointer=None):
     """Subgraph wrapping the study-plan generator."""
 
     def planner_node(state: AgentState) -> dict:
         params = state.get("task_inputs") or {}
+        # HITL: a study plan is useless without a goal + daily hours, so pause
+        # to ask for them when missing (no-op unless hitl_enabled).
+        params = _maybe_interrupt_for_params(
+            params,
+            ["goal", "hours"],
+            "A study plan needs your target (goal) and daily study hours.",
+        )
         text = _consume(
             generate_plan(
                 goal=params.get("goal", state.get("question", "")),
@@ -68,6 +110,15 @@ def build_evaluator_subgraph(checkpointer=None):
 
     def evaluator_node(state: AgentState) -> dict:
         params = state.get("task_inputs") or {}
+        # HITL: Mains rubric scoring depends on the marks + word limit, so
+        # confirm them before grading (no-op unless hitl_enabled). Only prompt
+        # when this looks like a Mains request (marks hint present).
+        if params.get("marks") or params.get("word_limit"):
+            params = _maybe_interrupt_for_params(
+                params,
+                ["marks", "word_limit"],
+                "Mains evaluation needs the marks (e.g. 10/15) and word limit.",
+            )
         question = params.get("question", state.get("question", ""))
         answer = params.get("answer", "")
         if params.get("marks"):

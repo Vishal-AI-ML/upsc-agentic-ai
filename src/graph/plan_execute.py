@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_WORDS = 30
 DEFAULT_MAX_STEPS = 5
+DEFAULT_MAX_CONCURRENCY = 3  # bounded parallel sub-step fan-out (cost guard)
 
 # Multi-part cues that signal a question is worth decomposing even when short.
 _MULTIPART_CUES = (
@@ -215,18 +216,46 @@ def build_plan_execute_graph(
         )
         return {"plan_steps": steps}
 
+    # #5 Parallel execution. Sub-steps are independent (each runs on a fresh
+    # executor state), so they can run concurrently. Read the settings once at
+    # build time; FAIL-OPEN -> sequential when settings are unavailable.
+    parallel, max_concurrency = False, DEFAULT_MAX_CONCURRENCY
+    try:
+        from src.core.config import settings
+
+        parallel = bool(settings.plan_execute_parallel)
+        max_concurrency = max(1, int(settings.plan_execute_max_concurrency))
+    except Exception:  # pragma: no cover - settings present in app
+        pass
+
+    def _run_step(step):
+        """Answer one sub-step with the shared tool agent. Fail-open -> ''."""
+        try:
+            out = executor.invoke({"question": step})
+            answer = out.get("answer", "") if isinstance(out, dict) else ""
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("plan-execute: step failed (%s)", exc)
+            answer = ""
+        return {"step": step, "result": answer or ""}
+
     def execute_node(state):
         question = state.get("question", "")
         steps = state.get("plan_steps") or [question]
-        results = []
-        for step in steps:
+        # Concurrent fan-out for multi-step plans (order preserved by map);
+        # single-step plans skip the pool overhead. Sequential otherwise.
+        if parallel and len(steps) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            workers = min(max_concurrency, len(steps))
             try:
-                out = executor.invoke({"question": step})
-                answer = out.get("answer", "") if isinstance(out, dict) else ""
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    results = list(pool.map(_run_step, steps))
+                return {"step_results": results}
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning("plan-execute: step failed (%s)", exc)
-                answer = ""
-            results.append({"step": step, "result": answer or ""})
+                logger.warning(
+                    "plan-execute: parallel run failed (%s); retrying sequentially", exc
+                )
+        results = [_run_step(step) for step in steps]
         return {"step_results": results}
 
     def synthesize_node(state):
