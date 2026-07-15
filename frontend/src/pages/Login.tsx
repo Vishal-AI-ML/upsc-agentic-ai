@@ -39,14 +39,7 @@ export function Login() {
 
   return (
     <div className="relative grid min-h-screen place-items-center px-4">
-      <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 py-4">
-        <Link
-          to="/"
-          className="text-sm font-medium text-muted transition hover:text-fg"
-          title="Back to home"
-        >
-          {"\u2190"} Back to home
-        </Link>
+      <div className="absolute inset-x-0 top-0 flex items-center justify-end px-4 py-4">
         <ThemeToggle />
       </div>
       <Card className="w-full max-w-sm">
@@ -123,6 +116,15 @@ export function Login() {
             </Link>
           </div>
         )}
+        <div className="mt-3 text-center">
+          <Link
+            to="/"
+            className="text-sm font-medium text-muted transition hover:text-fg"
+            title="Back to home"
+          >
+            {"\u2190"} Back to home
+          </Link>
+        </div>
       </Card>
     </div>
   )
