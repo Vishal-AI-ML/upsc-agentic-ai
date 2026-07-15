@@ -130,6 +130,15 @@ app.add_middleware(
 )
 
 # -------------------------------------------------------------------
+# SECURITY HEADERS + REQUEST TIMEOUT (added by deployment hardening)
+# -------------------------------------------------------------------
+from src.api.security_headers import (
+    SecurityHeadersMiddleware, TimeoutMiddleware,
+)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TimeoutMiddleware, timeout_seconds=90)
+
+# -------------------------------------------------------------------
 # RATE LIMITING (per IP: rate_limit_requests / rate_limit_period)
 # -------------------------------------------------------------------
 app.add_middleware(RateLimitMiddleware)

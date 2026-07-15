@@ -38,7 +38,21 @@ _db_url = get_database_url()
 # SQLite needs check_same_thread=False to work with FastAPI's threadpool.
 _connect_args = {"check_same_thread": False} if _db_url.startswith("sqlite") else {}
 
-engine = create_engine(_db_url, pool_pre_ping=True, connect_args=_connect_args)
+# Hardened pool for free managed Postgres (Supabase/Neon): keep the pool
+# small (few connection slots) and recycle idle connections before the
+# provider drops them. SQLite keeps the simple single-connection path.
+if _db_url.startswith("sqlite"):
+    engine = create_engine(_db_url, pool_pre_ping=True, connect_args=_connect_args)
+else:
+    engine = create_engine(
+        _db_url,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        pool_recycle=280,
+        pool_timeout=30,
+        connect_args=_connect_args,
+    )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
