@@ -6,15 +6,7 @@
 
 8 specialised agents · a RAG knowledge core · a production observability stack — built to be *cheap to run* (free-tier cloud + 8 GB dev box) and *honest* (every answer is grounded and evaluated).
 
-[![CI](https://github.com/Vishal-AI-ML/upsc-agentic-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Vishal-AI-ML/upsc-agentic-ai/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-Uvicorn-009688?logo=fastapi&logoColor=white)
-![LangGraph](https://img.shields.io/badge/LangGraph-LangChain-1C3C3C?logo=langchain&logoColor=white)
-![Gemini](https://img.shields.io/badge/LLM-Gemini%20%E2%86%92%20Groq-4285F4?logo=googlegemini&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-180%20passing-brightgreen)
-![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
-
-### 🌐 [Live App](https://upsc-agentic-ai.vercel.app) &nbsp;·&nbsp; ⚙️ [API](https://upsc-agentic-ai.onrender.com) &nbsp;·&nbsp; 📖 [API Docs](https://upsc-agentic-ai.onrender.com/docs) &nbsp;·&nbsp; ❤️ [Health](https://upsc-agentic-ai.onrender.com/health)
+### 🌐 [Live App](https://upsc-ai-agentic.vercel.app/)  ·  ⚙️ [API](https://upsc-agentic-ai-gtsj.onrender.com/)  ·  📖 [API Docs](https://upsc-agentic-ai-gtsj.onrender.com/docs)  ·  ❤️ [Health](https://upsc-agentic-ai-gtsj.onrender.com/health)
 
 </div>
 
@@ -27,7 +19,7 @@
 - [The 8 agents](#-the-8-agents)
 - [Architecture](#️-architecture)
 - [How the RAG pipeline works](#-how-the-rag-pipeline-works)
-- [Reliability & AI-quality layers](#-reliability--ai-quality-layers)
+- [Reliability & AI-quality layers](#️-reliability--ai-quality-layers)
 - [Tech stack](#-tech-stack)
 - [Project structure](#-project-structure)
 - [Quickstart (local)](#-quickstart-local)
@@ -54,7 +46,7 @@ UPSC preparation drowns aspirants in scattered material — NCERTs, current affa
 
 A LangGraph **supervisor** routes each question to the right specialist agent. The agent retrieves grounded context (NCERT / current affairs / past papers), answers **with citations**, self-critiques via a reflection pass, and — for Mains — is scored by an LLM-as-judge behind a faithfulness gate.
 
-```
+```text
 "Explain Article 21 with case laws"  →  supervisor  →  mentor + RAG  →  grounded answer + citations
 "Evaluate my answer on federalism"   →  supervisor  →  evaluator     →  rubric score + feedback
 "Make me a 30-day History plan"      →  supervisor  →  planner       →  plan-and-execute timeline
@@ -108,12 +100,11 @@ flowchart TD
 Client (Vercel frontend)
         |
         v
-FastAPI (src/api/main.py:app)
-  - JWT auth + refresh  - rate limiting  - CORS  - errors -> Sentry
+FastAPI (src/api/main.py:app)   - JWT auth + refresh  - rate limiting  - CORS  - errors -> Sentry
         |
         v
 LangGraph supervisor  <->  Response cache (Upstash: exact + semantic)
-        |               <->  Memory (per-thread profile)
+        |             <->  Memory (per-thread profile)
         | route
         v
 8 specialist agents  --RAG-->  Vector store (Qdrant / Chroma)  <--  Gemini embeddings
@@ -123,19 +114,21 @@ Reflection + eval gate
         |
         v
 LLM: Gemini -> Groq fallback
-        |
-   traces -> Langfuse        errors -> Sentry
+        |    traces -> Langfuse
+             errors -> Sentry
 ```
 
 </details>
+
+---
 
 ## 🔎 How the RAG pipeline works
 
 1. **Hybrid retrieval** — a lexical arm (with query rewriting) **plus** a dense arm (Gemini embeddings).
 2. **Fusion** — both arms are merged with **Reciprocal Rank Fusion (RRF)**.
-3. **Rerank** — the fused set is reranked for final relevance.
+3. **Rerank** *(optional)* — the fused set is reranked for final relevance. Default provider is a local `sentence-transformers` CrossEncoder; Cohere Rerank is supported when `COHERE_API_KEY` is set. Both are lazy/optional — retrieval still works without them.
 4. **Groundedness gate** — a similarity threshold drops weak chunks; the answer carries **citations** back to its sources.
-5. **Backend** — Qdrant (managed) when `QDRANT_URL` is set, else on-disk **Chroma** for local dev.
+5. **Backend** — Qdrant (managed) when `QDRANT_URL` is set (production default), else on-disk **Chroma** for local dev.
 
 ---
 
@@ -148,6 +141,7 @@ LLM: Gemini -> Groq fallback
 | **LLM-as-judge eval** | Nightly faithfulness gate (strict, multi-metric, per-agent) |
 | **Retrieval eval** | Separate retrieval-quality report (precision / relevancy) |
 | **Response cache** | Exact **and** opt-in **semantic** (embedding-similarity) reuse |
+| **Admin dashboards** | In-app Cost, Monitoring & Experiments views (admin-only, live metrics) |
 | **Fail-open everywhere** | Cache / tracing / monitoring never break a request |
 
 ---
@@ -156,17 +150,17 @@ LLM: Gemini -> Groq fallback
 
 | Layer | Choice |
 |-------|--------|
-| Frontend | Deployed on **Vercel** ([upsc-agentic-ai.vercel.app](https://upsc-agentic-ai.vercel.app)) |
+| Frontend | React + Vite + Tailwind, deployed on **Vercel** ([upsc-ai-agentic.vercel.app](https://upsc-ai-agentic.vercel.app/)) |
 | API | FastAPI + Uvicorn |
 | Agents / orchestration | LangGraph + LangChain |
 | LLMs | Google Gemini (primary) → Groq (fallback) |
 | Embeddings | `models/gemini-embedding-001` |
-| Vector DB | Qdrant (prod) / Chroma (local) |
+| Vector DB | Qdrant (managed, prod) / Chroma (local dev) |
 | Relational DB | Postgres (Supabase) / SQLite (tests) |
 | Migrations | Alembic |
 | Cache | Upstash Redis (REST) |
 | Observability | Langfuse (tracing) + Sentry (errors) |
-| Auth | JWT access + refresh, email verification |
+| Auth | JWT access + refresh; email verification (SMTP-gated, off by default) |
 | Integrations | MCP server (stdio + streamable HTTP) |
 | Tooling | `uv`, pytest, GitHub Actions CI |
 | Hosting | Render (API, free tier) + Vercel (frontend) |
@@ -180,7 +174,8 @@ src/
   api/
     main.py            # FastAPI app factory + lifespan (entrypoint: app)
     routes/            # auth, chat, mentor, planner, ncert, lecture,
-                       # current_affairs, pyq, evaluator, upload, history, feedback
+                       # current_affairs, pyq, evaluator, upload, history,
+                       # feedback, cost, monitoring, experiments, progress
   agents/              # one package per specialist agent (graphs + prompts)
   graph/               # supervisor, rag_graph, state, profile, tools, reflection
   core/
@@ -193,8 +188,9 @@ src/
     security.py, db.py, email_utils.py, rate_limit.py, ...
   eval/                # llm_eval, retrieval_eval, gates
   models/              # ORM + pydantic schemas
+  mcp_server.py        # MCP tool server (stdio + HTTP)
 tests/                 # 29 test files, offline by default
-upsc-frontend/         # web client (deployed to Vercel)
+frontend/              # React + Vite web client (deployed to Vercel)
 migrations/            # Alembic
 render.yaml            # Render blueprint
 .github/workflows/ci.yml
@@ -211,12 +207,22 @@ git clone https://github.com/Vishal-AI-ML/upsc-agentic-ai.git
 cd upsc-agentic-ai
 
 uv sync                       # install deps from uv.lock
-cp .env.example .env          # then fill in the values below
+# create a .env in the repo root and fill in the values below
 uv run alembic upgrade head   # create DB tables
 uv run uvicorn src.api.main:app --reload
 ```
 
-Open <http://localhost:8000/docs>.
+Open [http://localhost:8000/docs](http://localhost:8000/docs).
+
+**Frontend (optional, local):**
+
+```bash
+cd frontend
+npm install
+npm run dev                   # Vite dev server on http://localhost:5173
+```
+
+Set `VITE_API_BASE=http://localhost:8000/api/v1` in `frontend/.env` to point the client at your local API.
 
 ---
 
@@ -229,17 +235,26 @@ Open <http://localhost:8000/docs>.
 | `GOOGLE_API_KEY` | Gemini LLM + embeddings |
 | `DATABASE_URL` | Postgres (Supabase) in prod; SQLite locally |
 | `JWT_SECRET` | Strong random string — **boot fails in prod if weak** |
-| `DEBUG` | Must be `false` in prod |
-| `CORS_ORIGINS` | Include your deployed frontend origin (the Vercel URL) |
+| `DEBUG` | Must be `false` in prod (or set `ENV=production`) |
+| `CORS_ORIGINS` | Comma-separated; include your Vercel origin, e.g. `https://upsc-ai-agentic.vercel.app` |
 
 ### Optional — models & retrieval
 
 | Key | Notes |
 |-----|-------|
-| `GROQ_API_KEY` | Fallback LLM on Gemini 429s |
-| `QDRANT_URL` / `QDRANT_API_KEY` | Enables Qdrant; else local Chroma |
+| `GROQ_API_KEY` | Fallback LLM on Gemini 429s (`ENABLE_PROVIDER_FALLBACK=true`) |
+| `QDRANT_URL` / `QDRANT_API_KEY` | Enables managed Qdrant; else local Chroma |
 | `TAVILY_API_KEY` | Web search for current affairs |
-| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Email verification / password reset |
+| `COHERE_API_KEY` | Optional Cohere reranker (`RERANK_PROVIDER=cohere`) |
+| `SIMILARITY_THRESHOLD` / `MENTOR_KB_THRESHOLD` | Groundedness cut-offs (defaults `0.3` / `0.25`) |
+
+### Optional — auth / email
+
+| Key | Notes |
+|-----|-------|
+| `REQUIRE_EMAIL_VERIFICATION` | `false` by default in prod; when `true`, verification is only enforced if SMTP is configured |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Enable real email verification / password reset |
+| `FRONTEND_URL` | Used to build verification / reset links |
 
 ### Optional — response cache (Upstash)
 
@@ -252,7 +267,7 @@ Open <http://localhost:8000/docs>.
 | `RESPONSE_CACHE_SEMANTIC` | Default `false`; embedding-similarity fallback |
 | `RESPONSE_CACHE_SEMANTIC_THRESHOLD` | Cosine hit threshold, default `0.92` |
 
-### Optional — observability
+### Optional — observability & admin
 
 | Key | Notes |
 |-----|-------|
@@ -262,6 +277,7 @@ Open <http://localhost:8000/docs>.
 | `SENTRY_DSN` | Enables Sentry error capture |
 | `SENTRY_ENVIRONMENT` | e.g. `production` |
 | `SENTRY_TRACES_SAMPLE_RATE` | Default `0.0` |
+| `ADMIN_EMAILS` | JSON list of admin emails, e.g. `["you@example.com"]` — unlocks the in-app Cost / Monitoring / Experiments dashboards |
 
 > ⚠️ **Never commit real secrets.** Rotate any credential that has ever been shared in plaintext.
 
@@ -277,25 +293,27 @@ uv run pytest -q                 # full offline suite (no API key needed)
 - **Live smoke test** (opt-in, hits the deployed URL, absorbs cold starts):
 
 ```bash
-LIVE_BASE_URL=https://upsc-agentic-ai.onrender.com uv run pytest tests/test_smoke_live.py -q
+LIVE_BASE_URL=https://upsc-agentic-ai-gtsj.onrender.com uv run pytest tests/test_smoke_live.py -q
 ```
 
 ---
 
 ## ☁️ Deployment
 
-**API → Render** (managed by `render.yaml` blueprint). Start command:
+**API → Render** (managed by the `render.yaml` blueprint, **free** plan, region `singapore`, Python `3.13`). Start command:
 
 ```bash
 uv run alembic upgrade head && uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
 ```
 
-1. **New → Web Service** → connect the repo (Blueprint auto-detected) → **Free** plan.
-2. Add all env vars above (Gemini, Groq, Supabase `DATABASE_URL`, Qdrant, `JWT_SECRET`, Upstash, Langfuse, Sentry, `DEBUG=false`).
-3. Deploy → verify boot logs show `📊 Langfuse: True` and `🚨 Sentry: True`.
-4. **Keep-alive:** free instances sleep after 15 min idle (~1 min cold start). A [cron-job.org](https://cron-job.org) job pings `/health` every 10 minutes (`*/10 * * * *`) to keep it warm.
+1. **New → Blueprint** → connect the repo (Render auto-detects `render.yaml`) → **Free** plan.
+2. Add the secret env vars (Gemini, Groq, Supabase `DATABASE_URL`, Qdrant, `JWT_SECRET`, Tavily, Langfuse, `CORS_ORIGINS`, and optionally Upstash / Sentry / `ADMIN_EMAILS`).
+3. Deploy → verify the boot logs and hit `/health`.
+4. **Keep-alive:** free instances sleep after ~15 min idle (~1 min cold start). A [cron-job.org](https://cron-job.org/) job pings `/health` every 10 minutes (`*/10 * * * *`) to keep it warm.
 
-**Frontend → Vercel** ([upsc-agentic-ai.vercel.app](https://upsc-agentic-ai.vercel.app)) — point its API base URL at the Render service and add that origin to `CORS_ORIGINS`.
+> **No persistent disk needed** — embeddings live in managed Qdrant and all user/auth/history data is in Supabase Postgres, so the service is stateless and free-tier friendly.
+
+**Frontend → Vercel** ([upsc-ai-agentic.vercel.app](https://upsc-ai-agentic.vercel.app/)) — set `VITE_API_BASE=https://upsc-agentic-ai-gtsj.onrender.com/api/v1` and add that Vercel origin to the API's `CORS_ORIGINS`.
 
 ---
 
@@ -306,8 +324,9 @@ uv run alembic upgrade head && uv run uvicorn src.api.main:app --host 0.0.0.0 --
 | **Upstash Redis** | Response cache | Cuts repeat latency + LLM cost; free 256 MB |
 | **Langfuse** | LLM tracing / analytics | See every prompt, token, cost, and agent trace |
 | **Sentry** | Error monitoring | Real-time crash alerts with stack traces |
+| **In-app admin** | Cost / Monitoring / Experiments | Live request metrics, cost estimates and feedback tallies for `ADMIN_EMAILS` users |
 
-All three **fail open** — if unconfigured or unreachable, the app runs exactly as before.
+All external tools **fail open** — if unconfigured or unreachable, the app runs exactly as before.
 
 ---
 
@@ -344,8 +363,10 @@ Production roadmap #1–#13 — **all shipped & live**:
 - [x] Sentry monitoring
 - [x] Render deploy + keep-alive cron
 - [x] Live e2e smoke test in CI
+- [x] In-app admin dashboards (Cost / Monitoring / Experiments)
+- [x] React frontend refresh — light/dark theme + redesigned landing page
 
-**Next up (nice-to-have):** distributed rate limiting (Upstash-backed) · deprecation cleanup · frontend refresh-token wiring → shorter access-token TTL.
+**Next up (nice-to-have):** real per-call token/cost tracking feeding the Cost dashboard · distributed rate limiting (Upstash-backed) · SMTP-based email verification enabled in prod · deprecation cleanup.
 
 ---
 
