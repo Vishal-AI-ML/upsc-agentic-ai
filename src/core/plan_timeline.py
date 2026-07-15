@@ -28,6 +28,45 @@ def _months_from_date(prelims_dt, today):
     return max(0, (prelims_dt.year - today.year) * 12 + (prelims_dt.month - today.month))
 
 
+# Offline-safe date parsing. `dateutil` is optional (not a hard dependency), so
+# we fall back to a set of common explicit formats when it is unavailable. This
+# keeps the helper deterministic in the offline CI gate.
+_DATE_FORMATS = (
+    "%d %B %Y",
+    "%d %b %Y",
+    "%d %B, %Y",
+    "%d %b, %Y",
+    "%B %d %Y",
+    "%B %d, %Y",
+    "%Y-%m-%d",
+    "%d-%m-%Y",
+    "%d/%m/%Y",
+)
+
+
+def _parse_live_date(live_date):
+    """Parse a human date string into a datetime, or return None.
+
+    Tries `dateutil` when present, otherwise a list of explicit formats so the
+    result is identical with or without the optional dependency.
+    """
+    if not live_date:
+        return None
+    try:
+        from dateutil import parser as dateparser
+
+        return dateparser.parse(live_date)
+    except Exception:
+        pass
+    text = live_date.strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def timeline_message(months_left):
     if months_left == 0:
         return "Prelims is this month. Shift focus entirely to revision and mocks."
@@ -49,11 +88,9 @@ def compute_plan_timeline(goal, *, today=None, live_date=None):
     attempt_year = parse_attempt_year(goal, today)
     months_left = None
     if live_date:
-        try:
-            from dateutil import parser as dateparser
-            months_left = _months_from_date(dateparser.parse(live_date), today)
-        except Exception:
-            months_left = None
+        parsed = _parse_live_date(live_date)
+        if parsed is not None:
+            months_left = _months_from_date(parsed, today)
     if months_left is None:
         months_left = _months_from_year(attempt_year, today)
     return StudyPlanMeta(

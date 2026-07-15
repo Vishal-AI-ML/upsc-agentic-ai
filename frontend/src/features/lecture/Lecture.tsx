@@ -205,7 +205,9 @@ export function Lecture() {
 
       {lecture && lecture.mindmap_html && (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-fg">\u{1F5FA}\u{FE0F} Mind Map</h2>
+          <h2 className="text-lg font-semibold text-fg">
+            {"\u{1F5FA}\u{FE0F}"} Mind Map
+          </h2>
           <div
             className="overflow-x-auto"
             dangerouslySetInnerHTML={{ __html: lecture.mindmap_html }}
@@ -215,7 +217,9 @@ export function Lecture() {
 
       {lecture && lecture.questions_html && (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-fg">\u{1F4DD} Practice Questions</h2>
+          <h2 className="text-lg font-semibold text-fg">
+            {"\u{1F4DD}"} Practice Questions
+          </h2>
           <div dangerouslySetInnerHTML={{ __html: lecture.questions_html }} />
         </Card>
       )}
@@ -227,7 +231,9 @@ export function Lecture() {
             {messages.map((m, i) => (
               <div
                 key={i}
-                className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+                className={
+                  m.role === "user" ? "flex justify-end" : "flex justify-start"
+                }
               >
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 ${
