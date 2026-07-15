@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api, type CurrentUser } from "../lib/api"
 import { useAuth } from "../lib/auth"
+import { ThemeToggle } from "./ThemeToggle"
 
 function initials(u: CurrentUser | null): string {
   const src = (u?.name || u?.email || "U").trim()
@@ -83,6 +84,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
               {streak === 1 ? "day" : "days"}
             </span>
           </span>
+          <ThemeToggle />
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-brand text-sm font-bold text-white">
               {initials(user)}

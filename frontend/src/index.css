@@ -3,9 +3,44 @@
 @tailwind utilities;
 
 @layer base {
-  html {
+  /* ---- Light theme (default) ---- */
+  :root {
+    --bg: #fbfaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f2ee;
+    --ink: #15171c;
+    --muted: #5c6573;
+    --line: #ebe6dd;
+    --brand: #4338ca;
+    --brand-2: #6d28d9;
+    --accent: #f59e0b;
+    --glow: rgba(99, 90, 230, 0.18);
+    --shadow: rgba(20, 20, 30, 0.08);
+    --ok: #16a34a;
+    --warn: #d97706;
+    --bad: #dc2626;
+    color-scheme: light;
+  }
+
+  /* ---- Dark theme ---- */
+  [data-theme="dark"] {
+    --bg: #0a0d16;
+    --surface: #121726;
+    --surface-2: #171d2e;
+    --ink: #eef1f7;
+    --muted: #97a1b2;
+    --line: #222a3c;
+    --brand: #818cf8;
+    --brand-2: #a78bfa;
+    --accent: #fbbf24;
+    --glow: rgba(129, 140, 248, 0.22);
+    --shadow: rgba(0, 0, 0, 0.5);
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
     color-scheme: dark;
   }
+
   body {
     @apply bg-bg text-fg font-sans antialiased;
   }
@@ -13,22 +48,37 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-border bg-surface shadow-card;
+    @apply rounded-2xl border border-border bg-surface shadow-card;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-brand {
-    @apply bg-brand text-white hover:bg-brand-600;
+    @apply text-white;
+    background-image: linear-gradient(135deg, var(--brand), var(--brand-2));
+    box-shadow: 0 6px 20px var(--glow);
+  }
+  .btn-brand:hover {
+    opacity: 0.92;
   }
   .btn-ghost {
-    @apply bg-surface2 text-fg hover:bg-border;
+    @apply border border-border bg-surface text-fg;
+  }
+  .btn-ghost:hover {
+    border-color: var(--brand);
   }
   .input {
-    @apply w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-fg outline-none placeholder:text-muted focus:border-brand-400;
+    @apply w-full rounded-xl border border-border bg-surface2 px-3 py-2 text-fg outline-none placeholder:text-muted focus:border-brand-400;
   }
   .label {
     @apply mb-1 block text-sm font-medium text-muted;
+  }
+  /* Gradient brand wordmark / headline accent */
+  .brand-text {
+    background: linear-gradient(100deg, var(--brand), var(--brand-2) 55%, var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }
 
@@ -62,13 +112,13 @@
   padding-left: 1.25rem;
 }
 .prose-chat code {
-  background: #1b2338;
+  background: var(--surface-2);
   padding: 0.1rem 0.3rem;
   border-radius: 0.25rem;
   font-size: 0.9em;
 }
 .prose-chat pre {
-  background: #0f1626;
+  background: var(--surface-2);
   padding: 0.75rem;
   border-radius: 0.5rem;
   overflow: auto;
@@ -78,7 +128,7 @@
   padding: 0;
 }
 .prose-chat a {
-  color: #8b5cf6;
+  color: var(--brand-2);
   text-decoration: underline;
 }
 .prose-chat table {
@@ -87,7 +137,7 @@
 }
 .prose-chat th,
 .prose-chat td {
-  border: 1px solid #232a3d;
+  border: 1px solid var(--line);
   padding: 0.35rem 0.5rem;
   text-align: left;
 }
