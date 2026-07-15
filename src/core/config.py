@@ -1,8 +1,9 @@
 """Core configuration - Pydantic Settings"""
 import logging
 from functools import lru_cache
-from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from src.core.secret_utils import resolve_jwt_secret
 
@@ -129,7 +130,7 @@ class Settings(BaseSettings):
     # CORS - sirf apne asli frontend origins (NOT "*" with credentials).
     # .env mein override kar sakte ho, e.g.:
     #   CORS_ORIGINS=["http://localhost:8501","https://myapp.com"]
-    cors_origins: list[str] = [
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:8501",   # Streamlit default
         "http://127.0.0.1:8501",
         "http://localhost:3000",   # React/Next dev (agar use karo)
@@ -196,7 +197,7 @@ class Settings(BaseSettings):
     # These users - and only these - see the cost dashboard tab and can call
     # /cost/*. Empty => no admins (cost surfaces stay locked).
     #   e.g. ADMIN_EMAILS=["you@example.com"]
-    admin_emails: list[str] = []
+    admin_emails: Annotated[list[str], NoDecode] = []
 
     # Cost dashboard pricing - ₹ per 1,000 tokens (input/output) per tier.
     # Blended by the observed LITE-vs-STRONG mix. Override via env when prices
@@ -288,6 +289,33 @@ class Settings(BaseSettings):
     sentry_environment: str = "production"
     sentry_traces_sample_rate: float = 0.0   # perf tracing off by default (cost)
     sentry_profiles_sample_rate: float = 0.0
+
+    @field_validator("cors_origins", "admin_emails", mode="before")
+    @classmethod
+    def _parse_list_env(cls, v):
+        """Accept a JSON array OR a plain comma-separated string from env.
+
+        Hosting dashboards make strict JSON easy to get wrong, so both
+        CORS_ORIGINS=["https://a.com","https://b.com"] and
+        CORS_ORIGINS=https://a.com,https://b.com are accepted. Quotes and
+        stray whitespace are stripped defensively.
+        """
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                import json
+                try:
+                    return json.loads(s)
+                except Exception:
+                    s = s.strip("[]")
+            return [
+                item.strip().strip('\"').strip("'")
+                for item in s.split(",")
+                if item.strip().strip('\"').strip("'")
+            ]
+        return v
 
     @property
     def is_production(self) -> bool:
