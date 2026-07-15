@@ -187,3 +187,113 @@ def compose_grounded_answer(
     if confidence is not None:
         text += format_trust_note(confidence, unsupported_claims or [])
     return text
+
+
+# --- Citation honesty guard -------------------------------------------------
+# A retrieved chunk is NOT proof the answer used it. If a KB chunk clears the
+# vector threshold but the model actually answered from its own knowledge, we
+# must NOT staple that source onto the answer (that produced false "Sources
+# used" like a topper's strategy note under a constitutional-law answer).
+# These helpers verify real content overlap before a KB source is cited.
+
+import os as _os
+
+# Fraction of the ANSWER's distinctive words that must also appear in a KB
+# chunk before we trust that the answer was actually drawn from it. Tunable.
+try:
+    _MIN_KB_OVERLAP = float(_os.getenv("MENTOR_CITATION_MIN_OVERLAP", "0.25"))
+except (TypeError, ValueError):
+    _MIN_KB_OVERLAP = 0.25
+
+_KB_CITATION_MARKER = "knowledge base \u2014 "
+
+# Latin + Devanagari word characters, so Hindi answers are handled too.
+_TOKEN_RE = re.compile(r"[a-zA-Z0-9\u0900-\u097F]+")
+
+# Very common words that carry no topical signal (kept small + bilingual).
+_STOP_TOKENS = {
+    "the", "and", "for", "that", "this", "with", "from", "are", "was", "were",
+    "have", "has", "had", "into", "over", "under", "which", "while", "their",
+    "they", "them", "then", "than", "there", "these", "those", "such", "also",
+    "been", "being", "about", "would", "could", "should", "will", "shall",
+    "your", "you", "our", "can", "not", "but", "any", "all", "each", "more",
+    "most", "some", "other", "only", "very", "much", "many", "jaise", "aur",
+    "hai", "hain", "tha", "the", "kya", "kar", "karo", "liye", "mein", "apne",
+}
+
+
+def _content_tokens(text: str) -> set:
+    """Distinctive (>=4 char, non-stopword) lowercase tokens for overlap tests."""
+    return {
+        t for t in _TOKEN_RE.findall((text or "").lower())
+        if len(t) >= 4 and t not in _STOP_TOKENS
+    }
+
+
+def kb_chunks_from_tool_messages(messages) -> dict:
+    """Map each KB source label -> the retrieved chunk text it contributed.
+
+    ``knowledge_base_tool_fn`` prefixes each passage with ``[<source>] ``; we
+    stitch every line back to its owning source so we can later check whether
+    the final answer actually reflects that source's content.
+    """
+    chunks: dict = {}
+    for message in messages or []:
+        if getattr(message, "type", "") != "tool":
+            continue
+        if (getattr(message, "name", "") or "") != "knowledge_base_search":
+            continue
+        content = getattr(message, "content", "") or ""
+        if not isinstance(content, str):
+            content = str(content)
+        current = None
+        for line in content.splitlines():
+            if _is_fence_or_guard(line):
+                continue
+            stripped = line.strip()
+            if stripped.startswith("[") and "]" in stripped:
+                src = stripped[1:stripped.index("]")].strip()
+                rest = stripped[stripped.index("]") + 1:]
+                current = src or None
+                if current:
+                    chunks[current] = chunks.get(current, "") + " " + rest
+            elif current:
+                chunks[current] = chunks.get(current, "") + " " + stripped
+    return chunks
+
+
+def filter_kb_citations_by_overlap(
+    answer, messages, citations, *, min_overlap: float | None = None
+) -> list:
+    """Drop KB citations the answer did not actually use.
+
+    For every ``knowledge base \u2014 <src>`` citation we measure how much of the
+    answer's distinctive vocabulary appears in that source's retrieved chunk.
+    Below ``min_overlap`` the source was retrieved but not used, so we drop it.
+    Web / non-KB citations pass through untouched.
+    """
+    if not citations:
+        return citations
+    threshold = _MIN_KB_OVERLAP if min_overlap is None else min_overlap
+    chunks = kb_chunks_from_tool_messages(messages)
+    if not chunks:
+        return citations
+    answer_tokens = _content_tokens(answer)
+    if len(answer_tokens) < 8:
+        # Answer too short to judge overlap reliably; leave citations as-is.
+        return citations
+    kept = []
+    for citation in citations:
+        label = str(citation)
+        if not label.startswith(_KB_CITATION_MARKER):
+            kept.append(citation)  # web / other sources unaffected
+            continue
+        src = label[len(_KB_CITATION_MARKER):].strip()
+        chunk_tokens = _content_tokens(chunks.get(src, ""))
+        if not chunk_tokens:
+            continue  # cannot verify -> do not cite
+        overlap = len(answer_tokens & chunk_tokens) / len(answer_tokens)
+        if overlap >= threshold:
+            kept.append(citation)
+        # else: retrieved but not reflected in the answer -> drop silently
+    return kept

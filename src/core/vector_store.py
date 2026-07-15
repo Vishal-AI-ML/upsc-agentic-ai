@@ -23,6 +23,7 @@ from src.core.retrieval import (
     generate_hypothetical_document,
 )
 
+from langchain_core.embeddings import Embeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -41,12 +42,73 @@ SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.3"))
 # --------------------------------------------------------------------------- #
 # Embeddings + text splitting (backend-agnostic)
 # --------------------------------------------------------------------------- #
+class _DimPinnedEmbeddings(Embeddings):
+    """Wrap an Embeddings so EVERY call pins output_dimensionality.
+
+    IMPORTANT: langchain-google-genai accepts `output_dimensionality` only as a
+    PER-CALL kwarg on embed_query/embed_documents -- NOT as a constructor field.
+    Passing it to the constructor is silently ignored, so vectors stay 3072-dim
+    and mismatch a 768-dim Qdrant collection. This wrapper injects the size on
+    every embed call so it matches the existing collection. FAIL-OPEN: agar lib
+    ye kwarg support na kare (TypeError), plain call pe gir jaata hai.
+    """
+
+    def __init__(self, inner: Embeddings, dim: int):
+        self._inner = inner
+        self._dim = int(dim)
+
+    def _pin(self, vec):
+        """Guarantee exactly self._dim dims. gemini-embedding-001 is a Matryoshka
+        model, so truncating to the first N dims and L2-normalizing is the
+        officially-supported way to get a smaller embedding. This runs even if
+        the API ignored output_dimensionality, so the result ALWAYS matches the
+        collection dimension."""
+        if not vec or len(vec) <= self._dim:
+            return vec
+        v = vec[: self._dim]
+        norm = sum(x * x for x in v) ** 0.5 or 1.0
+        return [x / norm for x in v]
+
+    def embed_documents(self, texts):
+        try:
+            out = self._inner.embed_documents(texts, output_dimensionality=self._dim)
+        except TypeError:
+            out = self._inner.embed_documents(texts)
+        return [self._pin(v) for v in out]
+
+    def embed_query(self, text):
+        try:
+            vec = self._inner.embed_query(text, output_dimensionality=self._dim)
+        except TypeError:
+            vec = self._inner.embed_query(text)
+        return self._pin(vec)
+
+    def __getattr__(self, name):
+        # Delegate anything else (e.g. .model) to the wrapped embeddings.
+        return getattr(self._inner, name)
+
+
 def _make_gemini_embeddings():
-    """Gemini API embeddings (settings.embedding_model)."""
-    return GoogleGenerativeAIEmbeddings(
+    """Gemini API embeddings (settings.embedding_model).
+
+    Output dimension ko settings.gemini_embedding_dim pe pin karte hain taaki wo
+    existing Qdrant collection ki dimension se match kare. gemini-embedding-001
+    768/1536/3072 support karta hai aur default 3072 deta hai -- agar collection
+    768 pe bana ho to bina pin kiye retrieval 'dimension mismatch' se fail hota
+    hai. dim=0 rakho to koi dimension force nahi hoti (purana behaviour).
+    """
+    base = GoogleGenerativeAIEmbeddings(
         model=settings.embedding_model,
         google_api_key=settings.google_api_key,
     )
+    # Default 768 -- config.py update na bhi ho to bhi existing 768-dim Qdrant
+    # collection se match ho jaaye. Full 3072 (no pinning) chahiye to
+    # .env me GEMINI_EMBEDDING_DIM=3072 set kar (tab _pin no-op ho jaata hai).
+    dim = int(getattr(settings, "gemini_embedding_dim", 768) or 768)
+    if dim > 0:
+        logger.info("Gemini embeddings pinned to %d dims", dim)
+        return _DimPinnedEmbeddings(base, dim)
+    return base
 
 
 def _make_local_embeddings():

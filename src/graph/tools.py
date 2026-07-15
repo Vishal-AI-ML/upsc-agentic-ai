@@ -25,7 +25,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
-from src.core.grounding import citations_from_tool_messages, format_sources
+from src.core.grounding import (
+    citations_from_tool_messages,
+    filter_kb_citations_by_overlap,
+    format_sources,
+)
 from src.core.model_router import describe_route
 
 logger = logging.getLogger(__name__)
@@ -40,7 +44,12 @@ DEFAULT_TOOL_SYSTEM = (
     "notifications, results, cut-offs, vacancies, recent news). Call "
     "`knowledge_base_search` to ground concept explanations in verified "
     "material. Do NOT call a tool for greetings, motivation, or things you "
-    "already know. After using tools, answer concisely in the student's "
+    "already know. For greetings, small talk, or vague one-liners such as "
+    "'hi', 'hello', or 'hey', reply in ONE short, warm sentence and invite "
+    "the student to pick a topic (study plan, NCERT/GS doubts, current "
+    "affairs, PYQ practice, or mains answer evaluation); do NOT dump "
+    "generic exam-pattern, syllabus, or eligibility information unless they "
+    "actually ask for it. After using tools, answer concisely in the student's "
     "language and cite any source labels returned by the tools. "
     "CRITICAL - never fabricate time-sensitive facts: for exam dates, "
     "results, notifications, cut-offs or vacancies, rely ONLY on the "
@@ -48,7 +57,14 @@ DEFAULT_TOOL_SYSTEM = (
     "nothing relevant, clearly tell the student you could NOT fetch live "
     "information right now and point them to the official source "
     "(upsc.gov.in). NEVER state or guess such dated facts from your own "
-    "memory - your training data is stale and will be wrong."
+    "memory - your training data is stale and will be wrong. "
+    "GRACEFUL FALLBACK - the knowledge base is a bonus, not a gate: if "
+    "`knowledge_base_search` returns no passages or a NOTE that it is "
+    "unavailable, still answer conceptual, timeless questions (definitions, "
+    "concepts, history, polity, strategy) directly from your own expertise. "
+    "Do NOT reply that you cannot help or tell the student to try later for "
+    "such questions - only do that for the time-sensitive facts listed above. "
+    "Never mention internal tools, errors, or outages to the student."
 )
 
 
@@ -84,6 +100,20 @@ def web_search_tool_fn(query: str) -> str:
     )
 
 
+# Jab KB me kuch na mile ya fail ho -- model ko clearly bolo ki apne knowledge se
+# jawab de (apology mat de). Yahi "LLM fallback" hai: KB bonus hai, gate nahi.
+KB_FALLBACK_NOTE = (
+    "NOTE: no matching passages were found in the knowledge base for this query. "
+    "If this is a conceptual, timeless, or explanatory question (definitions, "
+    "polity, history, geography, economy, concepts, strategy, judgments), ANSWER "
+    "IT FULLY AND CONFIDENTLY from your own expertise. Do NOT tell the student you "
+    "cannot help, cannot access the knowledge base, or to try again later, and do "
+    "NOT mention this note or any tool/outage. ONLY for time-sensitive facts "
+    "(exam dates, results, cut-offs, vacancies, notifications) should you defer to "
+    "official sources instead of answering from memory."
+)
+
+
 def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
     """Grounded retrieval.
 
@@ -99,10 +129,18 @@ def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
     if not persist_key:
         from src.core import mentor_kb
 
-        kb = mentor_kb.search_kb(query, k=4)
+        try:
+            kb = mentor_kb.search_kb(query, k=4)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("knowledge_base_search (mentor KB) unavailable: %s", exc)
+            return (
+                "NOTE: the knowledge base is temporarily unavailable. If this "
+                "is a conceptual or timeless question, answer it directly from "
+                "your own expertise; do not mention this outage."
+            )
         context = kb.get("context")
         if not context:
-            return "No matching background knowledge found."
+            return KB_FALLBACK_NOTE
         # KB passages originate from ingested (untrusted) documents - fence them.
         from src.core.prompt_safety import harden_untrusted
 
@@ -112,12 +150,12 @@ def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
 
     db = load_vector_store(persist_key)
     if db is None:
-        return f"No document collection found for '{persist_key}'."
+        return KB_FALLBACK_NOTE
     try:
         scored = db.similarity_search_with_relevance_scores(query, k=4)
     except Exception as exc:  # noqa: BLE001
         logger.warning("knowledge_base_search failed for %s: %s", persist_key, exc)
-        return "Knowledge-base lookup failed."
+        return KB_FALLBACK_NOTE
 
     parts = []
     for doc, _score in scored:
@@ -131,7 +169,7 @@ def knowledge_base_tool_fn(query: str, persist_key: str = "") -> str:
         prefix = f"[{src}] " if src else ""
         parts.append(f"{prefix}{doc.page_content}")
     if not parts:
-        return "No relevant passages found."
+        return KB_FALLBACK_NOTE
     # Retrieved document text is untrusted - fence it before the model reads it.
     from src.core.prompt_safety import harden_untrusted
 
@@ -183,7 +221,11 @@ def run_tool_calls(
                 content = f"ERROR: bad arguments for tool '{name}': {exc}"
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Tool '%s' raised: %s", name, exc)
-                content = f"ERROR: tool '{name}' failed: {exc}"
+                # KB fail ho to bhi model apne knowledge se jawab de (apology nahi).
+                if name == "knowledge_base_search":
+                    content = KB_FALLBACK_NOTE
+                else:
+                    content = f"ERROR: tool '{name}' failed: {exc}"
         results.append({"tool_call_id": call_id, "name": name, "content": content})
     return results
 
@@ -428,6 +470,10 @@ def build_tool_agent(
             # (web_search URLs / knowledge_base_search labels). Deterministic,
             # no extra LLM call - citations land on every grounded answer.
             citations = citations_from_tool_messages(history)
+            # Honesty guard: only keep a KB source if the answer actually used
+            # its content (prevents a strategy note being cited under an answer
+            # the model wrote from its own knowledge).
+            citations = filter_kb_citations_by_overlap(answer, history, citations)
             if citations:
                 answer = answer + format_sources(citations)
             out["answer"] = answer

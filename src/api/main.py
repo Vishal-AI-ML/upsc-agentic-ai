@@ -1,4 +1,5 @@
 """FastAPI Main Application"""
+import importlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,8 @@ from src.api.rate_limit import RateLimitMiddleware
 from src.api.upload_limit import MaxUploadSizeMiddleware
 from src.graph.app_graph import build_app
 from src.graph.memory import close_memory
+
+# Core routers are always present.
 from src.api.routes import (
     mentor, planner, ncert, lecture, current_affairs,
     upload, pyq, evaluator, auth, history, feedback, chat,
@@ -28,6 +31,32 @@ from src.api.routes import (
 # -------------------------------------------------------------------
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Optional HTTP-metrics middleware (admin-only monitoring dashboard). Older
+# checkouts may not ship this module, so import defensively and fail-open.
+try:
+    from src.api.http_metrics_mw import HttpMetricsMiddleware
+except Exception:  # pragma: no cover - optional feature
+    HttpMetricsMiddleware = None
+    logger.warning("HttpMetricsMiddleware not available; monitoring metrics off")
+
+
+def _load_optional_routers(names):
+    """Import optional route modules by name, skipping any that are absent.
+
+    Keeps the app booting on older checkouts that do not yet ship the admin
+    dashboard / background-job routes (cost, experiments, monitoring, etc.).
+    """
+    modules = []
+    for name in names:
+        try:
+            modules.append(importlib.import_module(f"src.api.routes.{name}"))
+        except Exception:
+            logger.warning(
+                "Optional route module '%s' not available; skipping", name
+            )
+    return modules
+
 
 # Error monitoring (Sentry). No-op when SENTRY_DSN is unset; fail-open on error.
 init_sentry()
@@ -45,6 +74,21 @@ async def lifespan(app: FastAPI):
     logger.info(f"\U0001f4ca Langfuse: {observability.langfuse_enabled()}")
     logger.info(f"\U0001f6a8 Sentry: {sentry_enabled()}")
     init_db()
+    # Best-effort purge of dead auth-token rows on boot (fail-open). A cron /
+    # platform scheduler can also run scripts/cron_cleanup.py for periodic
+    # hygiene between restarts.
+    try:
+        from src.core.token_cleanup import purge_expired_tokens
+        purge_expired_tokens()
+    except Exception:
+        logger.warning("Startup token cleanup skipped", exc_info=True)
+    # Register background job handlers so both the web process and any rq
+    # worker can execute enqueued jobs (#10). Optional; fail-open.
+    try:
+        from src.core.job_handlers import register_all
+        register_all()
+    except Exception:
+        logger.warning("Background job handlers not registered", exc_info=True)
     ensure_vector_storage()
     # Build the LangGraph supervisor once (checkpointer + long-term store wired)
     # and reuse it across all requests.
@@ -95,15 +139,14 @@ app.add_middleware(RateLimitMiddleware)
 # -------------------------------------------------------------------
 app.add_middleware(MaxUploadSizeMiddleware)
 
-# Optional MCP server mount (opt-in via MCP_ENABLED). No-op + no dependency
-# loaded when disabled; never let MCP wiring break app boot.
-try:
-    from src.mcp_server import mount_mcp
-
-    mount_mcp(app)
-except Exception as _mcp_exc:  # noqa: BLE001
-    logging.getLogger(__name__).warning("MCP mount skipped: %s", _mcp_exc)
-
+# -------------------------------------------------------------------
+# HTTP METRICS (roadmap #18) - optional, admin-only monitoring dashboard
+# -------------------------------------------------------------------
+# Records latency / status / endpoint per request. Added last so it is the
+# OUTERMOST app middleware and times the full pipeline. Skipped when the module
+# is not present in this checkout. Fail-open.
+if HttpMetricsMiddleware is not None:
+    app.add_middleware(HttpMetricsMiddleware)
 
 # -------------------------------------------------------------------
 # GLOBAL EXCEPTION HANDLER
@@ -159,6 +202,12 @@ _protected_routers = [
     current_affairs, upload, pyq, evaluator,
     history, feedback, chat,
 ]
+
+# Optional routers (admin dashboards + background jobs). Silently skipped if the
+# corresponding module is not present in this checkout, so the app always boots.
+_protected_routers += _load_optional_routers(
+    ["progress", "cost", "jobs", "experiments", "monitoring"]
+)
 
 for module in _protected_routers:
     app.include_router(
