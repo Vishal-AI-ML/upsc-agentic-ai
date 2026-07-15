@@ -1,5 +1,5 @@
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react"
-import { NavLink } from "react-router-dom"
+import { Link, NavLink } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
@@ -164,9 +164,11 @@ export function Sidebar({
         }
       >
         {/* Brand */}
-        <div
+        <Link
+          to="/"
+          title="Go to UPSC AI home"
           className={
-            "flex items-center gap-2 border-b border-border px-4 py-4 " +
+            "flex items-center gap-2 border-b border-border px-4 py-4 transition hover:bg-surface2/60 " +
             (collapsed ? "justify-center px-2" : "")
           }
         >
@@ -181,7 +183,7 @@ export function Sidebar({
               <div className="text-[11px] text-muted">Your Personal Mentor</div>
             </div>
           )}
-        </div>
+        </Link>
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2 pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

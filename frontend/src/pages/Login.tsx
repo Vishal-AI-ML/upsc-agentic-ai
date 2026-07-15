@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { useAuth } from "../lib/auth"
 import { Button, Card, Input } from "../components/ui"
+import { ThemeToggle } from "../components/ThemeToggle"
 
 export function Login() {
   const { login, register } = useAuth()
@@ -37,11 +38,25 @@ export function Login() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center px-4">
+    <div className="relative grid min-h-screen place-items-center px-4">
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 py-4">
+        <Link
+          to="/"
+          className="text-sm font-medium text-muted transition hover:text-fg"
+          title="Back to home"
+        >
+          {"\u2190"} Back to home
+        </Link>
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-sm">
-        <div className="mb-1 text-center text-2xl font-extrabold">
+        <Link
+          to="/"
+          className="mb-1 block text-center text-2xl font-extrabold transition hover:opacity-80"
+          title="Go to UPSC AI home"
+        >
           UPSC<span className="text-brand-400">AI</span>
-        </div>
+        </Link>
         <p className="mb-5 text-center text-sm text-muted">
           Sign in or create your account
         </p>
@@ -103,10 +118,7 @@ export function Login() {
         {msg && <p className="mt-3 text-center text-sm text-warning">{msg}</p>}
         {mode === "login" && (
           <div className="mt-3 text-center">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-muted hover:text-fg"
-            >
+            <Link to="/forgot-password" className="text-sm text-muted hover:text-fg">
               Forgot password?
             </Link>
           </div>

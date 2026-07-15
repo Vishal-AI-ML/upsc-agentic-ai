@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { NavLink } from "react-router-dom"
+import { Link, NavLink } from "react-router-dom"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
 import { getApiBase, setApiBase } from "../lib/config"
@@ -34,21 +34,23 @@ export function Nav() {
   const tabs = [
     ...TABS,
     ...(access?.admin ? [{ to: "/app/cost", label: "💰 Cost" }] : []),
-    ...(expAccess?.admin
-      ? [{ to: "/app/experiments", label: "🧪 Experiments" }]
-      : []),
+    ...(expAccess?.admin ? [{ to: "/app/experiments", label: "🧪 Experiments" }] : []),
   ]
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-bg/80 backdrop-blur">
       <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-3">
-        <div className="flex shrink-0 items-center gap-2 font-extrabold">
+        <Link
+          to="/"
+          title="Go to UPSC AI home"
+          className="flex shrink-0 items-center gap-2 font-extrabold transition hover:opacity-80"
+        >
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">
             U
           </span>
           <span>
             UPSC<span className="text-brand-400">AI</span>
           </span>
-        </div>
+        </Link>
         <nav className="flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((t) => (
             <NavLink
