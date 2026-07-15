@@ -221,8 +221,9 @@ def get_embeddings():
 
 def reset_embeddings() -> None:
     """Drop the cached embeddings singleton (e.g. after changing provider)."""
-    global _embeddings_instance
+    global _embeddings_instance, _embed_dim_cache
     _embeddings_instance = None
+    _embed_dim_cache = None
 
 
 def get_text_splitter() -> RecursiveCharacterTextSplitter:
@@ -287,15 +288,69 @@ def get_qdrant_client():
     return _qdrant_client_instance
 
 
+_embed_dim_cache = None
+
+
 def _embedding_dim(embeddings) -> int:
-    """Probe the embedding model's output dimensionality once."""
-    return len(embeddings.embed_query("dimension probe"))
+    """Probe the embedding model's output dimensionality once (cached)."""
+    global _embed_dim_cache
+    if _embed_dim_cache is None:
+        _embed_dim_cache = len(embeddings.embed_query("dimension probe"))
+    return _embed_dim_cache
+
+
+def _qdrant_collection_dim(client, name: str):
+    """Return the configured vector size of an existing Qdrant collection, or None.
+
+    Handles both single-vector and named-vector configs across qdrant-client
+    versions. Best-effort: returns None if it can't be determined.
+    """
+    try:
+        info = client.get_collection(name)
+        vectors = info.config.params.vectors
+        if hasattr(vectors, "size"):
+            return int(vectors.size)
+        if isinstance(vectors, dict) and vectors:
+            first = next(iter(vectors.values()))
+            return int(getattr(first, "size", None) or first["size"])
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not read Qdrant collection dim for '{name}': {e}")
+    return None
+
+
+def _qdrant_dim_ok(client, name: str, embeddings) -> bool:
+    """True if the collection is missing or its dim matches the current embeddings.
+
+    A mismatch means the collection was built with a different embedding size
+    (e.g. an old 3072-dim collection while we now emit 768-dim vectors), which
+    makes every query/add fail. Callers use this to self-heal by recreating.
+    """
+    if not client.collection_exists(name):
+        return True
+    have = _qdrant_collection_dim(client, name)
+    if have is None:
+        return True  # unknown -> don't destroy data on a false alarm
+    return have == _embedding_dim(embeddings)
 
 
 def _ensure_qdrant_collection(client, name: str, embeddings) -> None:
-    """Create a cosine-distance collection sized to the embedding model if missing."""
+    """Create a cosine-distance collection sized to the embedding model.
+
+    If a collection already exists but its vector dimension does NOT match the
+    current embedding model, it is dropped and recreated at the correct size.
+    This auto-heals the 'configured for N dims, selected embeddings are M-dim'
+    error after an embedding-model/dimension change (any leftover data for this
+    key is re-indexed by the caller).
+    """
     if client.collection_exists(name):
-        return
+        if _qdrant_dim_ok(client, name, embeddings):
+            return
+        have = _qdrant_collection_dim(client, name)
+        logger.warning(
+            f"Qdrant collection '{name}' dim {have} != embedding dim "
+            f"{_embedding_dim(embeddings)}; dropping + recreating."
+        )
+        client.delete_collection(name)
     from qdrant_client.http.models import Distance, VectorParams
 
     dim = _embedding_dim(embeddings)
@@ -364,7 +419,13 @@ def vector_store_exists(persist_key: str) -> bool:
     if not persist_key:
         return False
     if _use_qdrant():
-        return _qdrant_has_points(get_qdrant_client(), collection_for(persist_key))
+        client = get_qdrant_client()
+        name = collection_for(persist_key)
+        # A dimension-mismatched collection is unusable; treat it as "not there"
+        # so the ingest path recreates it at the right size instead of failing.
+        if not _qdrant_dim_ok(client, name, get_embeddings()):
+            return False
+        return _qdrant_has_points(client, name)
     d = persist_dir_for(persist_key)
     return os.path.isdir(d) and bool(os.listdir(d))
 
@@ -385,6 +446,13 @@ def load_vector_store(persist_key: str) -> Optional[Any]:
         client = get_qdrant_client()
         name = collection_for(persist_key)
         if not client.collection_exists(name):
+            return None
+        # Skip a dimension-mismatched collection rather than crashing on query;
+        # the ingest path will recreate it at the correct size.
+        if not _qdrant_dim_ok(client, name, embeddings):
+            logger.warning(
+                f"Qdrant collection '{name}' has mismatched dim; ignoring on load."
+            )
             return None
         return QdrantVectorStore(
             client=client, collection_name=name, embedding=embeddings

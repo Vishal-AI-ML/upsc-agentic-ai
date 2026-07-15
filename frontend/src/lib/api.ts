@@ -630,7 +630,7 @@ export const api = {
     })
   },
 
-  // ── Lecture (YouTube / pasted transcript / audio) — sync=true runs inline ──
+  // ── Lecture (YouTube / pasted transcript) — sync=true runs inline ──
   lectureProcess(input: {
     youtube_url: string
     medium?: string
@@ -649,15 +649,6 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
-    })
-  },
-  lectureProcessAudio(file: File, medium: string): Promise<LectureResult> {
-    const form = new FormData()
-    form.append("file", file)
-    form.append("medium", medium)
-    return request<LectureResult>("/lecture/process-audio?sync=true", {
-      method: "POST",
-      body: form,
     })
   },
 }

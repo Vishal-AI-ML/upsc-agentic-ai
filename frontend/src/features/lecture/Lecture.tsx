@@ -4,14 +4,19 @@ import { Markdown } from "../../components/Markdown"
 import { Button, Card, Spinner } from "../../components/ui"
 import { Feedback } from "../../components/Feedback"
 
-type Tab = "youtube" | "text" | "audio"
+type Tab = "youtube" | "text"
 const MEDIUMS = ["English", "Hindi", "Hinglish"]
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "youtube", label: "YouTube" },
   { id: "text", label: "Paste transcript" },
-  { id: "audio", label: "Audio file" },
 ]
+
+// Extract the 11-char video id from any common YouTube URL shape.
+function ytId(url: string): string {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/)
+  return m ? m[1] : ""
+}
 
 interface Msg {
   role: "user" | "assistant"
@@ -32,7 +37,11 @@ export function Lecture() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [streaming, setStreaming] = useState(false)
 
-  async function process(kind: Tab, file?: File) {
+  // Prefer the id from the processed lecture; fall back to a live preview of
+  // whatever the user has typed into the URL box.
+  const embedId = (lecture?.video_id || "").trim() || ytId(youtubeUrl)
+
+  async function process(kind: Tab) {
     if (processing) return
     setProcessing(true)
     setError("")
@@ -43,12 +52,9 @@ export function Lecture() {
       if (kind === "youtube") {
         if (!youtubeUrl.trim()) throw new Error("Please paste a YouTube URL.")
         r = await api.lectureProcess({ youtube_url: youtubeUrl.trim(), medium })
-      } else if (kind === "text") {
+      } else {
         if (!transcript.trim()) throw new Error("Please paste a transcript.")
         r = await api.lectureProcessText({ transcript: transcript.trim(), medium })
-      } else {
-        if (!file) return
-        r = await api.lectureProcessAudio(file, medium)
       }
       setLecture(r)
     } catch (e) {
@@ -95,8 +101,8 @@ export function Lecture() {
       <div>
         <h1 className="text-2xl font-extrabold text-fg">Lecture Notes</h1>
         <p className="text-sm text-muted">
-          Turn a YouTube lecture, a pasted transcript, or an audio file into structured
-          notes — then chat with the lecture.
+          Turn a YouTube lecture or a pasted transcript into structured notes \u2014
+          then chat with the lecture.
         </p>
       </div>
 
@@ -105,7 +111,7 @@ export function Lecture() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm transition ${
                 tab === t.id ? "bg-surface2 text-fg" : "text-muted hover:text-fg"
               }`}
               onClick={() => setTab(t.id)}
@@ -138,14 +144,30 @@ export function Lecture() {
                 className="input"
                 value={youtubeUrl}
                 onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=…"
+                placeholder="https://www.youtube.com/watch?v=\u2026"
               />
             </div>
+
+            {/* Live embed preview as soon as a valid URL is pasted */}
+            {embedId && (
+              <div className="overflow-hidden rounded-xl border border-border">
+                <div className="relative aspect-video w-full">
+                  <iframe
+                    className="absolute inset-0 h-full w-full"
+                    src={`https://www.youtube.com/embed/${embedId}`}
+                    title="YouTube video player"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+            )}
+
             <Button
               onClick={() => void process("youtube")}
               disabled={processing || !youtubeUrl.trim()}
             >
-              {processing ? "Processing…" : "Generate notes"}
+              {processing ? "Processing\u2026" : "Generate notes"}
             </Button>
           </div>
         )}
@@ -158,42 +180,19 @@ export function Lecture() {
                 className="input min-h-[160px] resize-y"
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Paste the lecture transcript here…"
+                placeholder="Paste the lecture transcript here\u2026"
               />
             </div>
             <Button
               onClick={() => void process("text")}
               disabled={processing || !transcript.trim()}
             >
-              {processing ? "Processing…" : "Generate notes"}
+              {processing ? "Processing\u2026" : "Generate notes"}
             </Button>
           </div>
         )}
 
-        {tab === "audio" && (
-          <div className="space-y-3">
-            <label className="btn btn-brand cursor-pointer">
-              {processing ? "Processing…" : "Upload audio"}
-              <input
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                disabled={processing}
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) void process("audio", f)
-                  e.target.value = ""
-                }}
-              />
-            </label>
-            <p className="text-xs text-muted">
-              Works for caption-less lectures. Large files may take a while to
-              transcribe.
-            </p>
-          </div>
-        )}
-
-        {processing && <Spinner label="Transcribing and summarising…" />}
+        {processing && <Spinner label="Summarising the lecture\u2026" />}
         {error && <p className="text-sm text-danger">{error}</p>}
       </Card>
 
@@ -201,6 +200,23 @@ export function Lecture() {
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold text-fg">Notes</h2>
           <Markdown>{lecture.notes}</Markdown>
+        </Card>
+      )}
+
+      {lecture && lecture.mindmap_html && (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold text-fg">\u{1F5FA}\u{FE0F} Mind Map</h2>
+          <div
+            className="overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: lecture.mindmap_html }}
+          />
+        </Card>
+      )}
+
+      {lecture && lecture.questions_html && (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold text-fg">\u{1F4DD} Practice Questions</h2>
+          <div dangerouslySetInnerHTML={{ __html: lecture.questions_html }} />
         </Card>
       )}
 
@@ -224,10 +240,10 @@ export function Lecture() {
                     m.content ? (
                       <Markdown>{m.content}</Markdown>
                     ) : i === messages.length - 1 && streaming ? (
-                      <span className="text-muted">Thinking…</span>
+                      <span className="text-muted">Thinking\u2026</span>
                     ) : (
                       <span className="text-muted">
-                        No response — please ask again.
+                        No response \u2014 please ask again.
                       </span>
                     )
                   ) : (
@@ -240,7 +256,7 @@ export function Lecture() {
           <div className="flex items-end gap-2">
             <textarea
               className="input max-h-40 min-h-[48px] flex-1 resize-y"
-              placeholder="Ask something about this lecture…"
+              placeholder="Ask something about this lecture\u2026"
               value={q}
               rows={1}
               onChange={(e) => setQ(e.target.value)}
@@ -252,7 +268,7 @@ export function Lecture() {
               }}
             />
             <Button onClick={() => void ask()} disabled={streaming || !q.trim()}>
-              {streaming ? "…" : "Ask"}
+              {streaming ? "\u2026" : "Ask"}
             </Button>
           </div>
           {messages.length > 0 && !streaming && (

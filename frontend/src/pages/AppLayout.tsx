@@ -1,8 +1,9 @@
-import { Suspense, lazy, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Topbar } from "../components/Topbar"
 import { Spinner } from "../components/ui"
+import { usePersistentState } from "../lib/usePersistentState"
 
 // Route-level code splitting: each feature ships as its own lazy chunk, so the
 // initial app bundle stays small and a feature's JS is only fetched the first
@@ -47,19 +48,55 @@ const Upload = lazy(() =>
   import("../features/upload/Upload").then((m) => ({ default: m.Upload })),
 )
 
+const COLLAPSED_W = 76
+const MIN_W = 208
+const MAX_W = 420
+
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Persisted, user-resizable sidebar width + collapsed state (desktop only).
+  const [width, setWidth] = usePersistentState<number>("sidebar:width", 256)
+  const [collapsed, setCollapsed] = usePersistentState<boolean>(
+    "sidebar:collapsed",
+    false,
+  )
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(min-width:1024px)").matches
+      : true,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width:1024px)")
+    const handler = () => setIsDesktop(mq.matches)
+    handler()
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+
+  // Rail width on desktop reflects collapse; mobile always uses a comfy width.
+  const railWidth = collapsed ? COLLAPSED_W : width
+  const asideWidth = isDesktop ? railWidth : 272
 
   return (
     <div className="min-h-screen">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex min-h-screen flex-col lg:pl-64">
+      {/* Shift the main content by the current rail width on desktop only. */}
+      <style>{`@media (min-width:1024px){.main-shift{padding-left:${railWidth}px}}`}</style>
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        collapsed={isDesktop && collapsed}
+        width={asideWidth}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
+        onResize={(w) => setWidth(Math.min(MAX_W, Math.max(MIN_W, Math.round(w))))}
+      />
+      <div className="main-shift flex min-h-screen flex-col transition-[padding] duration-200">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
           <Suspense
             fallback={
               <div className="grid place-items-center py-20">
-                <Spinner label="Loading…" />
+                <Spinner label="Loading\u2026" />
               </div>
             }
           >

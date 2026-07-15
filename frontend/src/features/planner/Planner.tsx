@@ -7,6 +7,21 @@ import { Feedback } from "../../components/Feedback"
 import { parsePlan, structureSection, planKey } from "../../lib/planMarkdown"
 
 const ATTEMPTS = ["1", "2", "3", "4+"]
+const HOURS = ["2", "3", "4", "5", "6", "7", "8", "10", "12"]
+const OPTIONALS = [
+  "Not decided",
+  "Sociology",
+  "PSIR (Political Science & IR)",
+  "Geography",
+  "History",
+  "Public Administration",
+  "Anthropology",
+  "Philosophy",
+  "Economics",
+  "Mathematics",
+  "Hindi Literature",
+  "Commerce & Accountancy",
+]
 
 export function Planner() {
   const [goal, setGoal] = usePersistentState("planner:goal", "UPSC 2026")
@@ -133,21 +148,32 @@ export function Planner() {
           </div>
           <div>
             <label className="label">Daily study hours</label>
-            <input
+            <select
               className="input"
               value={hours}
               onChange={(e) => setHours(e.target.value)}
-              placeholder="e.g. 6"
-            />
+            >
+              {HOURS.map((h) => (
+                <option key={h} value={h}>
+                  {h} hours / day
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Optional subject</label>
-            <input
+            <select
               className="input"
               value={optional}
               onChange={(e) => setOptional(e.target.value)}
-              placeholder="e.g. Sociology (or leave blank)"
-            />
+            >
+              <option value="">Select optional\u2026</option>
+              {OPTIONALS.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Attempt number</label>

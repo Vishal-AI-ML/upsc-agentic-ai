@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { usePersistentState } from "../../lib/usePersistentState"
 import { api, streamAgent, type UploadResult } from "../../lib/api"
 import { Markdown } from "../../components/Markdown"
@@ -14,12 +14,18 @@ export function Upload() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState("")
   const [doc, setDoc] = usePersistentState<UploadResult | null>("upload:doc", null)
+  const [dragging, setDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const [q, setQ] = useState("")
   const [messages, setMessages] = usePersistentState<Msg[]>("upload:messages", [])
   const [streaming, setStreaming] = useState(false)
 
   async function upload(file: File) {
+    if (file.type && file.type !== "application/pdf") {
+      setError("Please choose a PDF file.")
+      return
+    }
     setProcessing(true)
     setError("")
     setDoc(null)
@@ -32,6 +38,13 @@ export function Upload() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    const f = e.dataTransfer.files?.[0]
+    if (f) void upload(f)
   }
 
   async function ask() {
@@ -77,26 +90,65 @@ export function Upload() {
       </div>
 
       <Card className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="btn btn-brand cursor-pointer">
-            {processing ? "Processing…" : "Upload PDF"}
-            <input
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              disabled={processing}
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void upload(f)
-                e.target.value = ""
-              }}
-            />
-          </label>
-          {processing && <Spinner label="Reading and summarising your PDF…" />}
-          {doc && !processing && (
-            <span className="text-sm text-muted">Loaded: {bookTitle}</span>
+        {/* Drag-and-drop dropzone */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => !processing && inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && !processing)
+              inputRef.current?.click()
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={
+            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition " +
+            (dragging
+              ? "border-brand bg-brand/5"
+              : "border-border hover:border-brand hover:bg-surface2")
+          }
+        >
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brandgrad text-2xl text-white">
+            {"\u{1F4C4}"}
+          </span>
+          {processing ? (
+            <Spinner label="Reading and summarising your PDF\u2026" />
+          ) : (
+            <>
+              <div className="text-base font-semibold text-fg">
+                Drag &amp; drop your PDF here
+              </div>
+              <div className="text-sm text-muted">
+                or <span className="font-medium text-brand-400">click to browse</span>{" "}
+                \u2014 book chapters, notes or reports
+              </div>
+            </>
           )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            disabled={processing}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void upload(f)
+              e.target.value = ""
+            }}
+          />
         </div>
+
+        {doc && !processing && (
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-surface2 px-3 py-2 text-sm">
+            <span>{"\u2705"}</span>
+            <span className="text-muted">Loaded:</span>
+            <span className="font-medium text-fg">{bookTitle}</span>
+          </div>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
       </Card>
 
@@ -127,7 +179,7 @@ export function Upload() {
                     m.content ? (
                       <Markdown>{m.content}</Markdown>
                     ) : (
-                      <span className="text-muted">Thinking…</span>
+                      <span className="text-muted">Thinking\u2026</span>
                     )
                   ) : (
                     <span className="whitespace-pre-wrap">{m.content}</span>
@@ -139,7 +191,7 @@ export function Upload() {
           <div className="flex items-end gap-2">
             <textarea
               className="input max-h-40 min-h-[48px] flex-1 resize-y"
-              placeholder="Ask something about this document…"
+              placeholder="Ask something about this document\u2026"
               value={q}
               rows={1}
               onChange={(e) => setQ(e.target.value)}
@@ -151,7 +203,7 @@ export function Upload() {
               }}
             />
             <Button onClick={() => void ask()} disabled={streaming || !q.trim()}>
-              {streaming ? "…" : "Ask"}
+              {streaming ? "\u2026" : "Ask"}
             </Button>
           </div>
           {messages.length > 0 && !streaming && (
