@@ -346,8 +346,8 @@ flowchart LR
 
 **Author — Vishal Shivhare** · GenAI / Backend Engineer
 
-[GitHub](https://github.com/) · [LinkedIn](https://www.linkedin.com/) · [Portfolio](https://example.com) · <sub>replace with live links</sub>
+[![GitHub](https://img.shields.io/badge/GitHub-Vishal--AI--ML-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Vishal-AI-ML) [![LinkedIn](https://img.shields.io/badge/LinkedIn-Vishal_Shivhare-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/vishal-shivhare-562508243/) [![Portfolio](https://img.shields.io/badge/Portfolio-vishal--ai--portfolio-6D28D9?style=flat-square&logo=vercel&logoColor=white)](https://vishal-ai-portfolio.vercel.app/)
 
-License: **MIT recommended** (add a `LICENSE` file; use Apache-2.0 if you want an explicit patent grant).
+License: **MIT** — see [LICENSE](LICENSE).
 
 </div>
