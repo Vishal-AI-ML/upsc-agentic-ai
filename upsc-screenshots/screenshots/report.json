@@ -1,0 +1,256 @@
+{
+  "generated_at": "2026-07-16T13:00:22.122Z",
+  "resolution": "1920x1080",
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "captured": 60,
+  "failed": 0,
+  "missing_routes": 0,
+  "shots": [
+    {
+      "file": "404-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "404.png",
+      "status": "ok"
+    },
+    {
+      "file": "backend-config-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "backend-config.png",
+      "status": "ok"
+    },
+    {
+      "file": "current-affairs-article-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "current-affairs-article.png",
+      "status": "ok"
+    },
+    {
+      "file": "current-affairs-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "current-affairs.png",
+      "status": "ok"
+    },
+    {
+      "file": "dashboard-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "dashboard.png",
+      "status": "ok"
+    },
+    {
+      "file": "error-boundary-dark.png",
+      "status": "ok",
+      "note": "intentional ErrorBoundary demo (injected null activity)"
+    },
+    {
+      "file": "error-boundary.png",
+      "status": "ok",
+      "note": "intentional ErrorBoundary demo (injected null activity)"
+    },
+    {
+      "file": "evaluator-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "evaluator-output-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "evaluator-output.png",
+      "status": "ok"
+    },
+    {
+      "file": "evaluator.png",
+      "status": "ok"
+    },
+    {
+      "file": "forgot-password-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "forgot-password.png",
+      "status": "ok"
+    },
+    {
+      "file": "history-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "history-restore-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "history-restore.png",
+      "status": "ok"
+    },
+    {
+      "file": "history.png",
+      "status": "ok"
+    },
+    {
+      "file": "login-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "login.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-chat-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-chat.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-empty-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-empty.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-streaming-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "mentor-streaming.png",
+      "status": "ok"
+    },
+    {
+      "file": "ncert-answer-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "ncert-answer.png",
+      "status": "ok"
+    },
+    {
+      "file": "ncert-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "ncert.png",
+      "status": "ok"
+    },
+    {
+      "file": "offline-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "offline.png",
+      "status": "ok"
+    },
+    {
+      "file": "planner-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "planner-plan-dark.png",
+      "status": "ok",
+      "note": "broken: dark-mode Generated Plan trips app ErrorBoundary (onToggle e.currentTarget null)"
+    },
+    {
+      "file": "planner-plan.png",
+      "status": "ok"
+    },
+    {
+      "file": "planner.png",
+      "status": "ok"
+    },
+    {
+      "file": "pyq-answer-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "pyq-answer.png",
+      "status": "ok"
+    },
+    {
+      "file": "pyq-generator-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "pyq-generator.png",
+      "status": "ok"
+    },
+    {
+      "file": "register-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "register.png",
+      "status": "ok"
+    },
+    {
+      "file": "settings-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "settings.png",
+      "status": "ok"
+    },
+    {
+      "file": "sidebar-collapsed-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "sidebar-collapsed.png",
+      "status": "ok"
+    },
+    {
+      "file": "sidebar-expanded-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "sidebar-expanded.png",
+      "status": "ok"
+    },
+    {
+      "file": "theme-switch-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "theme-switch.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-processing-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-processing.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-rag-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-rag.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-results-dark.png",
+      "status": "ok"
+    },
+    {
+      "file": "upload-results.png",
+      "status": "ok"
+    }
+  ]
+}
