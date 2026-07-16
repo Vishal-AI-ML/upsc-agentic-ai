@@ -8,14 +8,26 @@ Single place to configure log levels + format. Level priority:
 Noisy third-party loggers (httpx, urllib3, chromadb, ...) are turned down so
 our own app logs stay readable.
 """
+
 import logging
 import sys
 
 from src.core.config import settings
+from src.core.log_formatters import JsonFormatter, RequestIdFilter
 
 _LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-_NOISY = ("httpx", "httpcore", "urllib3", "chromadb", "langchain",
-          "google", "google_genai", "asyncio", "langfuse", "opentelemetry")
+_NOISY = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "chromadb",
+    "langchain",
+    "google",
+    "google_genai",
+    "asyncio",
+    "langfuse",
+    "opentelemetry",
+)
 
 
 def resolve_level() -> str:
@@ -23,6 +35,14 @@ def resolve_level() -> str:
     if name in _LEVELS:
         return name
     return "DEBUG" if settings.debug else "INFO"
+
+
+def resolve_format() -> str:
+    """Return 'json' or 'text'. Defaults to JSON in prod, text in debug."""
+    fmt = (settings.log_format or "").strip().lower()
+    if fmt in ("json", "text"):
+        return fmt
+    return "text" if settings.debug else "json"
 
 
 def setup_logging() -> str:
@@ -36,16 +56,23 @@ def setup_logging() -> str:
     for h in list(root.handlers):
         root.removeHandler(h)
 
+    fmt = resolve_format()
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    if fmt == "json":
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | [%(request_id)s] | %(name)s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+    handler.addFilter(RequestIdFilter())
     root.addHandler(handler)
 
     # Tone down noisy libraries
     for noisy in _NOISY:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    logging.getLogger(__name__).info(f"Logging configured at level {level_name}")
+    logging.getLogger(__name__).info("Logging configured at level %s (format=%s)", level_name, fmt)
     return level_name

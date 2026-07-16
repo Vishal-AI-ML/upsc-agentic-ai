@@ -8,14 +8,13 @@ that. After the stream completes, the collected text is parsed here into a
 structured object for reliable scoring/logging + a machine-readable API field.
 This replaces the previous single fragile `Score: X/Y` regex.
 """
+
 import re
 
 from src.schemas import AnswerEvaluation, MainsEvaluation
 
 # Tolerant of `## Score: 6/10`, `## 📊 Score: [7]/10`, `Score: 8.5 / 15`.
-_SCORE_RE = re.compile(
-    r"score\s*:?\s*\[?\s*(\d+(?:\.\d+)?)\s*\]?\s*/\s*(\d+)", re.IGNORECASE
-)
+_SCORE_RE = re.compile(r"score\s*:?\s*\[?\s*(\d+(?:\.\d+)?)\s*\]?\s*/\s*(\d+)", re.IGNORECASE)
 _BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*)$")
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s")
 _VERDICT_RE = re.compile(r"\*\*\s*verdict\s*:?\s*\*\*\s*(.+)", re.IGNORECASE)

@@ -1,44 +1,50 @@
 """FastAPI Main Application"""
+
 import importlib
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from src.core.config import settings
-from src.core.logging_config import setup_logging
-from src.core import observability
-from src.core.error_monitoring import init_sentry, sentry_enabled
-from src.core.db import init_db
-from src.core.vector_store import ensure_vector_storage
-from src.core.email_utils import smtp_configured
 from src.api.deps import get_current_user
+from src.api.http_metrics_mw import HttpMetricsMiddleware
 from src.api.rate_limit import RateLimitMiddleware
-from src.api.upload_limit import MaxUploadSizeMiddleware
-from src.graph.app_graph import build_app
-from src.graph.memory import close_memory
+from src.api.request_id import RequestIdMiddleware
 
 # Core routers are always present.
 from src.api.routes import (
-    mentor, planner, ncert, lecture, current_affairs,
-    upload, pyq, evaluator, auth, history, feedback, chat,
+    auth,
+    chat,
+    current_affairs,
+    evaluator,
+    feedback,
+    history,
+    lecture,
+    ncert,
+    planner,
+    pyq,
+    upload,
 )
+from src.api.upload_limit import MaxUploadSizeMiddleware
+from src.core import observability
+from src.core.config import settings
+from src.core.db import init_db
+from src.core.email_utils import smtp_configured
+from src.core.error_monitoring import init_sentry, sentry_enabled
+from src.core.job_handlers import register_all
+from src.core.logging_config import setup_logging
+from src.core.token_cleanup import purge_expired_tokens
+from src.core.vector_store import ensure_vector_storage
+from src.graph.app_graph import build_app
+from src.graph.memory import close_memory
 
 # -------------------------------------------------------------------
 # LOGGING
 # -------------------------------------------------------------------
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Optional HTTP-metrics middleware (admin-only monitoring dashboard). Older
-# checkouts may not ship this module, so import defensively and fail-open.
-try:
-    from src.api.http_metrics_mw import HttpMetricsMiddleware
-except Exception:  # pragma: no cover - optional feature
-    HttpMetricsMiddleware = None
-    logger.warning("HttpMetricsMiddleware not available; monitoring metrics off")
 
 
 def _load_optional_routers(names):
@@ -52,9 +58,7 @@ def _load_optional_routers(names):
         try:
             modules.append(importlib.import_module(f"src.api.routes.{name}"))
         except Exception:
-            logger.warning(
-                "Optional route module '%s' not available; skipping", name
-            )
+            logger.warning("Optional route module '%s' not available; skipping", name)
     return modules
 
 
@@ -74,21 +78,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"\U0001f4ca Langfuse: {observability.langfuse_enabled()}")
     logger.info(f"\U0001f6a8 Sentry: {sentry_enabled()}")
     init_db()
-    # Best-effort purge of dead auth-token rows on boot (fail-open). A cron /
-    # platform scheduler can also run scripts/cron_cleanup.py for periodic
-    # hygiene between restarts.
+    # Best-effort purge of dead auth-token rows on boot. The import is now hard
+    # (a core feature); only the DB call is guarded so a transient DB hiccup
+    # cannot block boot. A cron / scripts/cron_cleanup.py can also run this.
     try:
-        from src.core.token_cleanup import purge_expired_tokens
         purge_expired_tokens()
     except Exception:
         logger.warning("Startup token cleanup skipped", exc_info=True)
-    # Register background job handlers so both the web process and any rq
-    # worker can execute enqueued jobs (#10). Optional; fail-open.
-    try:
-        from src.core.job_handlers import register_all
-        register_all()
-    except Exception:
-        logger.warning("Background job handlers not registered", exc_info=True)
+    # Register background job handlers so the web process and any worker can
+    # execute enqueued jobs. Import + registration are required (no fail-open).
+    register_all()
     ensure_vector_storage()
     # Build the LangGraph supervisor once (checkpointer + long-term store wired)
     # and reuse it across all requests.
@@ -133,8 +132,10 @@ app.add_middleware(
 # SECURITY HEADERS + REQUEST TIMEOUT (added by deployment hardening)
 # -------------------------------------------------------------------
 from src.api.security_headers import (
-    SecurityHeadersMiddleware, TimeoutMiddleware,
+    SecurityHeadersMiddleware,
+    TimeoutMiddleware,
 )
+
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TimeoutMiddleware, timeout_seconds=90)
 
@@ -149,13 +150,18 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MaxUploadSizeMiddleware)
 
 # -------------------------------------------------------------------
-# HTTP METRICS (roadmap #18) - optional, admin-only monitoring dashboard
+# HTTP METRICS (roadmap #18) - admin-only monitoring dashboard
 # -------------------------------------------------------------------
-# Records latency / status / endpoint per request. Added last so it is the
-# OUTERMOST app middleware and times the full pipeline. Skipped when the module
-# is not present in this checkout. Fail-open.
-if HttpMetricsMiddleware is not None:
-    app.add_middleware(HttpMetricsMiddleware)
+# Records latency / status / endpoint per request.
+app.add_middleware(HttpMetricsMiddleware)
+
+# -------------------------------------------------------------------
+# REQUEST ID / TRACING
+# -------------------------------------------------------------------
+# Added last so it is the OUTERMOST middleware: every inner log line and the
+# response carry a correlation ID (inbound X-Request-ID honored, else generated).
+app.add_middleware(RequestIdMiddleware)
+
 
 # -------------------------------------------------------------------
 # GLOBAL EXCEPTION HANDLER
@@ -167,9 +173,7 @@ if HttpMetricsMiddleware is not None:
 # server-side with the request method + path for debugging.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception(
-        "Unhandled error on %s %s", request.method, request.url.path
-    )
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error. Please try again."},
@@ -207,9 +211,16 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 # PROTECTED ROUTES (JWT required)
 # -------------------------------------------------------------------
 _protected_routers = [
-    mentor, planner, ncert, lecture,
-    current_affairs, upload, pyq, evaluator,
-    history, feedback, chat,
+    planner,
+    ncert,
+    lecture,
+    current_affairs,
+    upload,
+    pyq,
+    evaluator,
+    history,
+    feedback,
+    chat,
 ]
 
 # Optional routers (admin dashboards + background jobs). Silently skipped if the

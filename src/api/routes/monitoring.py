@@ -5,10 +5,11 @@
 metrics collected by HttpMetricsMiddleware. If the middleware is not installed,
 an empty-but-valid snapshot is returned so the page still renders.
 """
+
 from fastapi import APIRouter, Depends
 
-from src.api.deps import get_current_user
 from src.api.admin_access import is_admin, require_admin
+from src.api.deps import get_current_user
 
 router = APIRouter(prefix="/monitoring", tags=["Monitoring"])
 
@@ -36,6 +37,7 @@ async def monitoring_overview(user: dict = Depends(require_admin)):
     """Admin-only: live latency / throughput / error-rate snapshot."""
     try:
         from src.api.http_metrics_mw import METRICS
+
         return METRICS.snapshot()
     except Exception:
         return dict(_EMPTY)

@@ -18,14 +18,19 @@ Only the standard library is imported at module load; all heavy/optional
 dependencies (Tavily, DuckDuckGo, Settings) are imported lazily inside the
 functions, so importing this module stays cheap and side-effect-free.
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Official / trusted sources for live UPSC facts (dates, notifications, etc.)
 TRUSTED_DOMAINS = [
-    "upsc.gov.in", "pib.gov.in", "mygov.in",
-    "thehindu.com", "indianexpress.com", "drishtiias.com",
+    "upsc.gov.in",
+    "pib.gov.in",
+    "mygov.in",
+    "thehindu.com",
+    "indianexpress.com",
+    "drishtiias.com",
 ]
 
 _search_tool = None
@@ -39,12 +44,15 @@ def _get_search_tool():
         # directly, not our Settings object) can find it. setdefault keeps
         # any real exported env var as the source of truth.
         import os as _os
+
         from src.core.config import settings as _settings
+
         _tavily_key = (_settings.tavily_api_key or "").strip()
         if _tavily_key:
             _os.environ.setdefault("TAVILY_API_KEY", _tavily_key)
         try:
             from langchain_tavily import TavilySearch
+
             try:
                 _search_tool = TavilySearch(max_results=4, include_domains=TRUSTED_DOMAINS)
             except Exception:
@@ -52,8 +60,11 @@ def _get_search_tool():
         except ImportError:
             try:
                 from langchain_community.tools.tavily_search import TavilySearchResults
+
                 try:
-                    _search_tool = TavilySearchResults(max_results=4, include_domains=TRUSTED_DOMAINS)
+                    _search_tool = TavilySearchResults(
+                        max_results=4, include_domains=TRUSTED_DOMAINS
+                    )
                 except Exception:
                     _search_tool = TavilySearchResults(max_results=4)
             except Exception as e:

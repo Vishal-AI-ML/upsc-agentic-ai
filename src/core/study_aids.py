@@ -5,8 +5,8 @@ All HTML is self-contained (inline CSS, no external CDN/JS) so it renders
 reliably inside Streamlit components.html().
 """
 
-import json
 import html
+import json
 import logging
 
 from src.core.llm import get_fast_llm
@@ -65,7 +65,7 @@ def _safe_json(raw: str):
     if start == -1 or end == -1 or end <= start:
         return None
     try:
-        return json.loads(s[start:end + 1])
+        return json.loads(s[start : end + 1])
     except Exception as e:
         logger.warning(f"study_aids JSON parse failed: {e}")
         return None
@@ -109,7 +109,7 @@ def _build_mindmap_html(data: dict) -> str:
     central = _esc(data.get("central", "")) or "Overview"
     branches = data.get("branches") or []
     parts = [_MINDMAP_CSS, '<div class="sa-mm">']
-    parts.append('<div class="sa-central">' + central + '</div>')
+    parts.append('<div class="sa-central">' + central + "</div>")
     parts.append('<div class="sa-branches">')
     for i, b in enumerate(branches):
         if not isinstance(b, dict):
@@ -119,13 +119,13 @@ def _build_mindmap_html(data: dict) -> str:
             continue
         color = _BRANCH_COLORS[i % len(_BRANCH_COLORS)]
         parts.append('<div class="sa-branch" style="border-left-color:' + color + '">')
-        parts.append('<h4>' + title + '</h4><ul>')
-        for p in (b.get("points") or []):
+        parts.append("<h4>" + title + "</h4><ul>")
+        for p in b.get("points") or []:
             txt = _esc(p)
             if txt:
-                parts.append('<li>' + txt + '</li>')
-        parts.append('</ul></div>')
-    parts.append('</div></div>')
+                parts.append("<li>" + txt + "</li>")
+        parts.append("</ul></div>")
+    parts.append("</div></div>")
     return "".join(parts)
 
 
@@ -140,19 +140,21 @@ def _build_questions_html(data: dict) -> str:
             if not isinstance(q, dict):
                 continue
             parts.append('<div class="sa-card">')
-            parts.append('<div class="sa-qtext">Q' + str(i) + '. ' + _esc(q.get("q", "")) + '</div>')
+            parts.append(
+                '<div class="sa-qtext">Q' + str(i) + ". " + _esc(q.get("q", "")) + "</div>"
+            )
             parts.append('<ul class="sa-opts">')
             for j, opt in enumerate(q.get("options") or []):
                 lab = _OPT_LABELS[j] if j < len(_OPT_LABELS) else str(j + 1)
-                parts.append('<li><b>' + lab + '.</b> ' + _esc(opt) + '</li>')
-            parts.append('</ul>')
+                parts.append("<li><b>" + lab + ".</b> " + _esc(opt) + "</li>")
+            parts.append("</ul>")
             ans = _esc(q.get("answer", ""))
             exp = _esc(q.get("explanation", ""))
             parts.append('<details class="sa-ans"><summary>Show answer</summary>')
-            parts.append('<p><b>Answer: ' + ans + '</b></p>')
+            parts.append("<p><b>Answer: " + ans + "</b></p>")
             if exp:
-                parts.append('<p>' + exp + '</p>')
-            parts.append('</details></div>')
+                parts.append("<p>" + exp + "</p>")
+            parts.append("</details></div>")
 
     if mains:
         parts.append('<h3 class="sa-h">Mains Practice</h3>')
@@ -160,13 +162,19 @@ def _build_questions_html(data: dict) -> str:
             if not isinstance(q, dict):
                 continue
             parts.append('<div class="sa-card">')
-            parts.append('<div class="sa-qtext">Q' + str(i) + '. ' + _esc(q.get("q", "")) + '</div>')
+            parts.append(
+                '<div class="sa-qtext">Q' + str(i) + ". " + _esc(q.get("q", "")) + "</div>"
+            )
             approach = _esc(q.get("approach", ""))
             if approach:
-                parts.append('<details class="sa-ans"><summary>Approach hint</summary><p>' + approach + '</p></details>')
-            parts.append('</div>')
+                parts.append(
+                    '<details class="sa-ans"><summary>Approach hint</summary><p>'
+                    + approach
+                    + "</p></details>"
+                )
+            parts.append("</div>")
 
-    parts.append('</div>')
+    parts.append("</div>")
     return "".join(parts)
 
 
@@ -177,8 +185,7 @@ def generate_study_aids(text: str, topic: str = "", paper: str = ""):
 
     material = text[:12000]
     prompt = (
-        _AIDS_PROMPT
-        .replace("<<TOPIC>>", topic or "General")
+        _AIDS_PROMPT.replace("<<TOPIC>>", topic or "General")
         .replace("<<PAPER>>", paper or "General Studies")
         .replace("<<TEXT>>", material)
     )
@@ -203,7 +210,9 @@ def generate_study_aids(text: str, topic: str = "", paper: str = ""):
         logger.warning(f"mindmap build failed: {e}")
         mindmap = ""
     try:
-        questions = _build_questions_html(data) if (data.get("prelims") or data.get("mains")) else ""
+        questions = (
+            _build_questions_html(data) if (data.get("prelims") or data.get("mains")) else ""
+        )
     except Exception as e:
         logger.warning(f"questions build failed: {e}")
         questions = ""

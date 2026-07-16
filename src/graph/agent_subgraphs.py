@@ -13,22 +13,23 @@ Expected ``task_inputs`` shapes:
                      (marks present -> Mains rubric; otherwise basic evaluation)
     current_affairs  {mode: "daily"|"editorial"|"monthly", date|topic|month+year}
 """
+
 from __future__ import annotations
 
 import logging
 
 from langchain_core.messages import AIMessage
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
-from src.core.config import settings
-from src.graph.state import AgentState
-from src.agents.planner.graph import generate_plan
-from src.agents.evaluator.graph import evaluate_answer, evaluate_mains
 from src.agents.current_affairs.graph import (
     get_daily_ca,
     get_editorial,
     get_monthly_summary,
 )
+from src.agents.evaluator.graph import evaluate_answer, evaluate_mains
+from src.agents.planner.graph import generate_plan
+from src.core.config import settings
+from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -151,9 +152,7 @@ def build_current_affairs_subgraph(checkpointer=None):
         if mode == "editorial":
             generator = get_editorial(params.get("topic", ""))
         elif mode == "monthly":
-            generator = get_monthly_summary(
-                params.get("month", ""), params.get("year", "")
-            )
+            generator = get_monthly_summary(params.get("month", ""), params.get("year", ""))
         else:
             generator = get_daily_ca(params.get("date", ""))
         text = _consume(generator)

@@ -4,15 +4,16 @@ These run in CI with no API key and no vector store: every function under test
 is pure. The live run (`python -m src.eval.retrieval_eval`) is separate and
 needs a populated vector store.
 """
+
 from src.eval.retrieval_eval import (
-    keyword_coverage,
     chunk_is_relevant,
-    relevance_flags,
+    compare_summaries,
     hit_at_k,
+    keyword_coverage,
     precision_at_k,
     reciprocal_rank,
+    relevance_flags,
     summarize_retrieval_scores,
-    compare_summaries,
 )
 
 
@@ -28,7 +29,10 @@ def test_keyword_coverage_does_not_match_substrings():
 
 
 def test_chunk_relevance_threshold():
-    assert chunk_is_relevant("science and curiosity", ["science", "curiosity"], min_overlap=0.6) is True
+    assert (
+        chunk_is_relevant("science and curiosity", ["science", "curiosity"], min_overlap=0.6)
+        is True
+    )
     assert chunk_is_relevant("science only", ["science", "curiosity"], min_overlap=0.6) is False
 
 
@@ -65,7 +69,7 @@ def test_empty_is_zero_not_crash():
 
 
 def test_compare_summaries_reports_lift():
-    dense = summarize_retrieval_scores([[False, True]], k=2, gate=0.7, label="dense")   # RR 0.5
+    dense = summarize_retrieval_scores([[False, True]], k=2, gate=0.7, label="dense")  # RR 0.5
     hybrid = summarize_retrieval_scores([[True, False]], k=2, gate=0.7, label="hybrid")  # RR 1.0
     ab = compare_summaries(dense, hybrid)
     assert ab["mrr_dense"] == 0.5

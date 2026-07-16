@@ -7,9 +7,10 @@ YouTube network calls are mocked, so these run fully offline with no API key.
 
 Run:  uv run pytest -q
 """
+
 import os
-import sys
 import pathlib
+import sys
 import tempfile
 
 # ---------------------------------------------------------------------------
@@ -42,7 +43,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 def client():
     """Boot the real app once against the throwaway SQLite DB."""
     from src.core.db import init_db
+
     init_db()
     from src.api.main import app
+
     with TestClient(app) as test_client:
         yield test_client

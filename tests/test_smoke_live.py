@@ -15,6 +15,7 @@ Optional demo-login check (read-only, writes nothing to prod)::
     LIVE_BASE_URL=... LIVE_DEMO_EMAIL=demo@upsc.local LIVE_DEMO_PASSWORD=Demo@12345 \
         uv run pytest tests/test_smoke_live.py -q
 """
+
 from __future__ import annotations
 
 import os

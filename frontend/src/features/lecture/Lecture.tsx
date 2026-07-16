@@ -30,6 +30,7 @@ export function Lecture() {
   const [transcript, setTranscript] = useState("")
 
   const [processing, setProcessing] = useState(false)
+  const [stage, setStage] = useState("")
   const [error, setError] = useState("")
   const [lecture, setLecture] = useState<LectureResult | null>(null)
 
@@ -51,16 +52,17 @@ export function Lecture() {
       let r: LectureResult
       if (kind === "youtube") {
         if (!youtubeUrl.trim()) throw new Error("Please paste a YouTube URL.")
-        r = await api.lectureProcess({ youtube_url: youtubeUrl.trim(), medium })
+        r = await api.lectureProcess({ youtube_url: youtubeUrl.trim(), medium }, setStage)
       } else {
         if (!transcript.trim()) throw new Error("Please paste a transcript.")
-        r = await api.lectureProcessText({ transcript: transcript.trim(), medium })
+        r = await api.lectureProcessText({ transcript: transcript.trim(), medium }, setStage)
       }
       setLecture(r)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not process the lecture.")
     } finally {
       setProcessing(false)
+      setStage("")
     }
   }
 
@@ -193,6 +195,13 @@ export function Lecture() {
         )}
 
         {processing && <Spinner label="Summarising the lecture\u2026" />}
+        {(stage === "queued" || stage === "running") && !error && (
+          <p className="text-sm text-muted">
+            {stage === "queued"
+              ? "Queued... waiting for a background worker."
+              : "Processing in the background... this can take a minute."}
+          </p>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
       </Card>
 

@@ -20,6 +20,7 @@ Layers (kept deliberately separate so the useful bits are testable offline):
 4. **Reusable agent** - ``build_tool_agent`` compiles a small ReAct-style
    LangGraph loop (model <-> tools) over the shared ``AgentState``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -403,8 +404,8 @@ def build_tool_agent(
     model answers with no tool calls or ``max_tool_loops`` is reached. The final
     answer is written to ``state['answer']``.
     """
-    from langgraph.graph import StateGraph, START, END
-    from langchain_core.messages import SystemMessage, HumanMessage
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langgraph.graph import END, START, StateGraph
 
     from src.graph.state import AgentState
     # NOTE: keep AgentState OFF the inner node/branch signatures below.
@@ -484,10 +485,7 @@ def build_tool_agent(
         last = state["messages"][-1]
         calls = getattr(last, "tool_calls", None) or []
         results = run_tool_calls(
-            [
-                {"name": c["name"], "args": c.get("args", {}), "id": c.get("id", "")}
-                for c in calls
-            ]
+            [{"name": c["name"], "args": c.get("args", {}), "id": c.get("id", "")} for c in calls]
         )
         return {"messages": to_tool_messages(results)}
 
@@ -497,11 +495,7 @@ def build_tool_agent(
         if last is None or not getattr(last, "tool_calls", None):
             return END
         # Count how many tool-execution rounds already happened; stop at the cap.
-        rounds = sum(
-            1
-            for m in msgs
-            if getattr(m, "tool_calls", None)
-        )
+        rounds = sum(1 for m in msgs if getattr(m, "tool_calls", None))
         if rounds > max_tool_loops:
             logger.warning("Tool loop cap (%s) reached; ending.", max_tool_loops)
             return END
@@ -523,7 +517,7 @@ if __name__ == "__main__":  # pragma: no cover
     app = build_tool_agent(checkpointer=InMemorySaver())
     cfg = {"configurable": {"thread_id": "tool-agent-1"}}
     for q in [
-        "Motivate me, I'm feeling low today.",          # -> no tool
+        "Motivate me, I'm feeling low today.",  # -> no tool
         "When is the UPSC Prelims 2026 exam scheduled?",  # -> web_search
     ]:
         result = app.invoke({"question": q}, cfg)

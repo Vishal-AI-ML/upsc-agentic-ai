@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Topbar } from "../components/Topbar"
 import { Spinner } from "../components/ui"
+import { ErrorBoundary } from "../components/ErrorBoundary"
+import { NotFound } from "./NotFound"
 import { usePersistentState } from "../lib/usePersistentState"
 
 // Route-level code splitting: each feature ships as its own lazy chunk, so the
@@ -30,9 +32,7 @@ const Monitoring = lazy(() =>
 const Planner = lazy(() =>
   import("../features/planner/Planner").then((m) => ({ default: m.Planner })),
 )
-const Pyq = lazy(() =>
-  import("../features/pyq/Pyq").then((m) => ({ default: m.Pyq })),
-)
+const Pyq = lazy(() => import("../features/pyq/Pyq").then((m) => ({ default: m.Pyq })))
 const Ncert = lazy(() =>
   import("../features/ncert/Ncert").then((m) => ({ default: m.Ncert })),
 )
@@ -93,31 +93,33 @@ export function AppLayout() {
       <div className="main-shift flex min-h-screen flex-col transition-[padding] duration-200">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-          <Suspense
-            fallback={
-              <div className="grid place-items-center py-20">
-                <Spinner label="Loading\u2026" />
-              </div>
-            }
-          >
-            <Routes>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="mentor" element={<MentorChat />} />
-              <Route path="evaluator" element={<Evaluator />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="history" element={<History />} />
-              <Route path="cost" element={<Cost />} />
-              <Route path="experiments" element={<Experiments />} />
-              <Route path="monitoring" element={<Monitoring />} />
-              <Route path="planner" element={<Planner />} />
-              <Route path="pyq" element={<Pyq />} />
-              <Route path="ncert" element={<Ncert />} />
-              <Route path="current-affairs" element={<CurrentAffairs />} />
-              <Route path="lecture" element={<Lecture />} />
-              <Route path="upload" element={<Upload />} />
-              <Route path="*" element={<Navigate to="dashboard" replace />} />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense
+              fallback={
+                <div className="grid place-items-center py-20">
+                  <Spinner label="Loading\u2026" />
+                </div>
+              }
+            >
+              <Routes>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="mentor" element={<MentorChat />} />
+                <Route path="evaluator" element={<Evaluator />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="history" element={<History />} />
+                <Route path="cost" element={<Cost />} />
+                <Route path="experiments" element={<Experiments />} />
+                <Route path="monitoring" element={<Monitoring />} />
+                <Route path="planner" element={<Planner />} />
+                <Route path="pyq" element={<Pyq />} />
+                <Route path="ncert" element={<Ncert />} />
+                <Route path="current-affairs" element={<CurrentAffairs />} />
+                <Route path="lecture" element={<Lecture />} />
+                <Route path="upload" element={<Upload />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

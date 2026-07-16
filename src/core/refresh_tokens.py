@@ -7,6 +7,7 @@ revoked and a new one issued), which lets us detect reuse of a stolen token,
 and /auth/logout revokes it so a session can be killed server-side -- something
 a bare stateless JWT cannot do.
 """
+
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -25,11 +26,7 @@ def _hash_token(raw: str) -> str:
 def _row_for(db: Session, raw_token: str) -> RefreshToken | None:
     if not raw_token:
         return None
-    return db.scalar(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == _hash_token(raw_token)
-        )
-    )
+    return db.scalar(select(RefreshToken).where(RefreshToken.token_hash == _hash_token(raw_token)))
 
 
 def _is_active(row: RefreshToken | None) -> bool:

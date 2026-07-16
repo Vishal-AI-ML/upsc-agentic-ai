@@ -16,6 +16,7 @@ re-running the agent graph, cutting latency and LLM cost on repeated/retried
 questions. The cache is a no-op unless configured, so behaviour is unchanged by
 default.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,11 +44,6 @@ class AgentChatRequest(BaseModel):
     )
 
 
-class AgentChatResponse(BaseModel):
-    response: str
-    route: str | None = None
-
-
 def _learn_from_question(store, user_id: str, profile: dict, question: str) -> None:
     """Update the long-term student profile from the raw question.
 
@@ -57,65 +53,6 @@ def _learn_from_question(store, user_id: str, profile: dict, question: str) -> N
     updates = extract_student_profile_signals(question)
     if updates:
         save_student_profile(store, user_id, merge_student_profile(profile, updates))
-
-
-@router.post("/chat", response_model=AgentChatResponse)
-def agent_chat(
-    payload: AgentChatRequest,
-    request: Request,
-    user: dict = Depends(get_current_user),
-) -> AgentChatResponse:
-    """Route a question through the supervisor graph and return the answer."""
-    agent_graph = getattr(request.app.state, "agent_graph", None)
-    if agent_graph is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Agent graph is not ready",
-        )
-
-    user_id = user["id"]
-    # Default to one stable thread per user; clients may pass an explicit
-    # thread_id to keep multiple independent conversations.
-    thread_id = payload.thread_id or f"{user_id}:default"
-    config = make_config(thread_id=thread_id, user_id=user_id)
-    store = get_store()
-    profile = load_student_profile(store, user_id)
-
-    # Cache hit -> skip the (expensive) graph run, but still learn from the
-    # question so the profile stays fresh.
-    cache = get_response_cache()
-    cached = cache.get(user_id=user_id, thread_id=thread_id, question=payload.question)
-    if cached is not None:
-        _learn_from_question(store, user_id, profile, payload.question)
-        return AgentChatResponse(
-            response=cached.get("answer") or "",
-            route=cached.get("route"),
-        )
-
-    try:
-        result = agent_graph.invoke(
-            {"question": payload.question, "student_context": profile}, config
-        )
-    except Exception:
-        logger.exception("Agent graph invocation failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Agent failed to generate a response",
-        )
-
-    answer = result.get("answer") or ""
-    route = result.get("route")
-    _learn_from_question(store, user_id, profile, payload.question)
-    if answer:
-        cache.set(
-            user_id=user_id,
-            thread_id=thread_id,
-            question=payload.question,
-            answer=answer,
-            route=route,
-        )
-
-    return AgentChatResponse(response=answer, route=route)
 
 
 # Nodes that emit the final, user-facing answer. Streaming is filtered to these
@@ -148,7 +85,7 @@ def _iter_chunks(text: str, size: int = 120):
     """Yield a cached answer in small slices so a cache hit still streams
     smoothly to the client instead of arriving as one large blob."""
     for i in range(0, len(text), size):
-        yield text[i:i + size]
+        yield text[i : i + size]
 
 
 @router.post("/chat/stream")
@@ -186,9 +123,7 @@ def agent_chat_stream(
 
     def generate():
         # Fast path: serve a cached answer without running the graph.
-        cached = cache.get(
-            user_id=user_id, thread_id=thread_id, question=payload.question
-        )
+        cached = cache.get(user_id=user_id, thread_id=thread_id, question=payload.question)
         if cached is not None:
             for piece in _iter_chunks(cached.get("answer") or ""):
                 yield piece

@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts"
 import { api, type MonitoringOverview } from "../../lib/api"
-import { Card, Spinner } from "../../components/ui"
+import { Card, Spinner, ErrorState } from "../../components/ui"
 
 const BRAND_COLOR = "#7c3aed"
 const DANGER_COLOR = "#f87171"
@@ -63,7 +63,9 @@ function StatCard({
   return (
     <Card className="flex flex-col gap-1">
       <span className="text-sm text-muted">{label}</span>
-      <span className={"text-3xl font-extrabold " + (danger ? "text-danger" : "text-fg")}>
+      <span
+        className={"text-3xl font-extrabold " + (danger ? "text-danger" : "text-fg")}
+      >
         {value}
       </span>
       {hint && <span className="text-xs text-muted">{hint}</span>}
@@ -87,7 +89,12 @@ function RequestsChart({ data }: { data: MonitoringOverview["hourly"] }) {
           </linearGradient>
         </defs>
         <CartesianGrid stroke="#232a3d" vertical={false} />
-        <XAxis dataKey="label" tick={axisTick} interval="preserveStartEnd" minTickGap={20} />
+        <XAxis
+          dataKey="label"
+          tick={axisTick}
+          interval="preserveStartEnd"
+          minTickGap={20}
+        />
         <YAxis tick={axisTick} allowDecimals={false} width={30} />
         <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} />
         <Area
@@ -110,7 +117,7 @@ function RequestsChart({ data }: { data: MonitoringOverview["hourly"] }) {
 }
 
 export function Monitoring() {
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["monitoring-overview"],
     queryFn: () => api.monitoring(),
     retry: false,
@@ -126,11 +133,16 @@ export function Monitoring() {
   }
 
   if (isError) {
-    const msg =
-      (error as { status?: number })?.status === 403
-        ? "You do not have access to the monitoring dashboard."
-        : "Could not load monitoring data. Please try again."
-    return <Card className="text-center text-muted">{msg}</Card>
+    const forbidden = (error as { status?: number })?.status === 403
+    const msg = forbidden
+      ? "You do not have access to the monitoring dashboard."
+      : "Could not load monitoring data. Please try again."
+    return (
+      <ErrorState
+        message={msg}
+        onRetry={forbidden ? undefined : () => void refetch()}
+      />
+    )
   }
 
   const d = data as MonitoringOverview
@@ -149,13 +161,17 @@ export function Monitoring() {
 
       {!hasTraffic && (
         <Card className="text-center text-muted">
-          No requests recorded yet. Use the app for a bit, then refresh to see
-          latency, throughput, and error rate.
+          No requests recorded yet. Use the app for a bit, then refresh to see latency,
+          throughput, and error rate.
         </Card>
       )}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Uptime" value={uptime(d.uptime_seconds)} hint="since restart" />
+        <StatCard
+          label="Uptime"
+          value={uptime(d.uptime_seconds)}
+          hint="since restart"
+        />
         <StatCard
           label="Requests"
           value={d.total_requests.toLocaleString("en-IN")}
@@ -229,7 +245,9 @@ export function Monitoring() {
       <Card className="flex flex-col gap-3">
         <h2 className="font-bold text-fg">Top endpoints</h2>
         {d.endpoints.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No endpoint activity yet.</p>
+          <p className="py-6 text-center text-sm text-muted">
+            No endpoint activity yet.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

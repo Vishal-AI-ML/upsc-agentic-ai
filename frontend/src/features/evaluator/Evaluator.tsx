@@ -79,7 +79,6 @@ export function Evaluator() {
   const [mode, setMode] = usePersistentState<Mode>("eval:mode", "answer")
   const [question, setQuestion] = usePersistentState("eval:question", "")
   const [answer, setAnswer] = usePersistentState("eval:answer", "")
-  const [topic, setTopic] = usePersistentState("eval:topic", "")
   const [marks, setMarks] = usePersistentState("eval:marks", 10)
   const [wordLimit, setWordLimit] = usePersistentState("eval:wordLimit", 150)
   const [keywords, setKeywords] = usePersistentState("eval:keywords", "")
@@ -110,19 +109,16 @@ export function Evaluator() {
     setResult(null)
     setModelAnswer("")
     try {
-      const topicValue = topic.trim() || undefined
       if (mode === "answer") {
         const r = await api.evaluateAnswer({
           question: question.trim(),
           answer: answer.trim(),
-          topic: topicValue,
         })
         setResult({ response: r.response, answer: r.structured })
       } else {
         const r = await api.evaluateMains({
           question: question.trim(),
           answer: answer.trim(),
-          topic: topicValue,
           marks,
           word_limit: wordLimit,
           keywords: keywordList(),
@@ -166,8 +162,8 @@ export function Evaluator() {
       <div>
         <h1 className="text-2xl font-extrabold text-fg">Answer Evaluator</h1>
         <p className="text-sm text-muted">
-          Get an examiner-style score with specific strengths and fixes. Add a topic and
-          the result feeds your Dashboard progress and revision schedule.
+          Get an examiner-style score with specific strengths and fixes on your
+          answer, plus an optional model answer to compare against.
         </p>
       </div>
 
@@ -216,17 +212,6 @@ export function Evaluator() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-fg">
-              Topic <span className="text-muted">(optional, recommended)</span>
-            </label>
-            <input
-              className="input w-full"
-              placeholder="e.g. Polity — Federalism"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-            />
-          </div>
           {mode === "mains" && (
             <div>
               <label className="mb-1 block text-sm font-medium text-fg">Marks</label>

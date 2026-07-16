@@ -18,6 +18,7 @@ without the MCP SDK or any heavy dependency:
    service). The ``mcp`` SDK is imported lazily so layer 1 (and app boot)
    never needs it.
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,9 +58,7 @@ def _collect(result) -> str:
     if isinstance(result, Iterable):
         parts = []
         for chunk in result:
-            parts.append(
-                chunk if isinstance(chunk, str) else str(getattr(chunk, "content", chunk))
-            )
+            parts.append(chunk if isinstance(chunk, str) else str(getattr(chunk, "content", chunk)))
         return "".join(parts)
     return str(result)
 
@@ -141,8 +140,7 @@ def build_mcp_tool_specs() -> list[ToolSpec]:
         ),
         ToolSpec(
             "current_affairs",
-            "The day's UPSC current-affairs digest, grounded in real news "
-            "feeds when available.",
+            "The day's UPSC current-affairs digest, grounded in real news feeds when available.",
             current_affairs,
         ),
     ]

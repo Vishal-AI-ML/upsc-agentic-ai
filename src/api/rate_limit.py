@@ -1,50 +1,42 @@
-"""Simple in-memory rate limiting middleware.
+"""Rate limiting middleware (distributed, with in-memory fallback).
 
-Per client-IP, allows `rate_limit_requests` within `rate_limit_period` seconds
-(values from settings). Beyond that -> 429 Too Many Requests.
+Per client-IP, allows ``rate_limit_requests`` within ``rate_limit_period``
+seconds (from settings). Beyond that -> 429 Too Many Requests.
 
-Note: in-memory = single process. Dev/single-instance ke liye perfect.
-Multi-worker / multi-instance production mein Redis-backed limiter chahiye
-(baad mein Phase 4 mein dekhenge).
+Backend: an Upstash-Redis fixed-window counter (correct across >1 worker /
+instance) when creds are configured and ``rate_limit_redis_enabled`` is on;
+otherwise an in-process sliding window. A Redis outage trips a circuit breaker
+and the limiter transparently falls back to in-memory -- it never adds latency
+or blocks the request path.
 """
-import time
-from collections import defaultdict, deque
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.api.rate_limit_core import RateLimiter
 from src.core.config import settings
 
-# In requests jinpe rate limit NAHI lagega (health checks, docs).
+# Requests exempt from rate limiting (health checks, docs).
 _EXEMPT_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Fixed-window-ish sliding limiter using a deque of timestamps per IP."""
-
     def __init__(self, app, max_requests: int | None = None, period: int | None = None):
         super().__init__(app)
         self.max_requests = max_requests or settings.rate_limit_requests
         self.period = period or settings.rate_limit_period
-        self._hits: dict[str, deque] = defaultdict(deque)
+        # Pass redis=False-y sentinel to force in-memory when disabled by config.
+        redis = None if settings.rate_limit_redis_enabled else _Disabled()
+        self._limiter = RateLimiter(self.max_requests, self.period, redis=redis)
 
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        if path in _EXEMPT_PATHS:
+        if request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-        window_start = now - self.period
-
-        dq = self._hits[client_ip]
-        # purane (window ke bahar) timestamps hatao
-        while dq and dq[0] < window_start:
-            dq.popleft()
-
-        if len(dq) >= self.max_requests:
-            retry_after = int(self.period - (now - dq[0])) + 1
+        allowed, retry_after = self._limiter.check(client_ip)
+        if not allowed:
             return JSONResponse(
                 status_code=429,
                 content={
@@ -55,6 +47,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
                 headers={"Retry-After": str(retry_after)},
             )
-
-        dq.append(now)
         return await call_next(request)
+
+
+class _Disabled:
+    """Sentinel redis object: never enabled -> RateLimiter uses in-memory."""
+
+    enabled = False
+
+    def command(self, command: list):  # pragma: no cover - never called
+        return None

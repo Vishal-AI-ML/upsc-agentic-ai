@@ -35,6 +35,7 @@ Usage::
     uv run python -m src.eval.llm_eval --gate 0.9 --strict \
         --relevancy-gate 0.7 --precision-gate 0.6
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,7 +43,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -51,7 +51,6 @@ from src.core.vector_store import (
     load_vector_store,
     similarity_search_with_sources,
 )
-from src.graph.rag_graph import build_rag_subgraph
 
 # Pure, dependency-free scoring + gate logic (offline-importable / testable).
 from src.eval.gates import (
@@ -63,6 +62,7 @@ from src.eval.gates import (
     summarize_scores,
     write_markdown_report,
 )
+from src.graph.rag_graph import build_rag_subgraph
 
 logger = logging.getLogger(__name__)
 
@@ -191,20 +191,28 @@ def run_eval(
         rel_scores.append(rel)
         prec_scores.append(prec)
         unsupported_claim_counts.append(len(unsupported_claims))
-        rows.append({
-            "question": question,
-            "agent": agent,
-            "faithfulness": faith,
-            "answer_relevancy": rel,
-            "context_precision": prec,
-            "unsupported_claims": len(unsupported_claims),
-        })
+        rows.append(
+            {
+                "question": question,
+                "agent": agent,
+                "faithfulness": faith,
+                "answer_relevancy": rel,
+                "context_precision": prec,
+                "unsupported_claims": len(unsupported_claims),
+            }
+        )
         logger.info(
             "Scored | agent=%s faith=%.2f rel=%.2f prec=%.2f | %s",
-            agent, faith, rel, prec, question[:50],
+            agent,
+            faith,
+            rel,
+            prec,
+            question[:50],
         )
 
-    summary = summarize_scores(faith_scores, rel_scores, prec_scores, gate, unsupported_claim_counts)
+    summary = summarize_scores(
+        faith_scores, rel_scores, prec_scores, gate, unsupported_claim_counts
+    )
     strict_result = evaluate_strict_gate(
         summary,
         faithfulness_gate=gate,

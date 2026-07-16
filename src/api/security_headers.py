@@ -7,6 +7,7 @@ Adds the headers scanners/pen-tests expect and a hard per-request timeout so a
 stuck upstream (LLM / vector DB) can never hold a worker forever on the free
 tier (single worker => one stuck request = total outage without this).
 """
+
 import asyncio
 import logging
 

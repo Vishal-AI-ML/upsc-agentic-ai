@@ -60,7 +60,7 @@ Top 3 recommendations:
 1. Geography — Scientific, map-based, heavy GS1 overlap. Abundant material.
 2. Anthropology — Small syllabus, high scoring, diagrams boost marks.
 3. Public Administration — Structured, GS2 overlap, good for analytical thinkers.
-"""
+""",
     },
     "History": {
         "context": "History optional — large syllabus, strong GS1 overlap.",
@@ -75,7 +75,7 @@ Paper 2 (Modern + World History):
 
 Timeline: Paper 1 — 2.5 months. Paper 2 — 2 months. Revision — 1 month.
 Target: 280-300/500
-"""
+""",
     },
     "Geography": {
         "context": "Geography optional — excellent GS1 overlap, consistently high scoring.",
@@ -90,7 +90,7 @@ Paper 2 (Human/Economic + India Geography):
 Maps: Draw one map daily. Non-negotiable.
 Timeline: Paper 1 — 3 months. Paper 2 — 2 months.
 Target: 300-320/500
-"""
+""",
     },
     "Public Administration": {
         "context": "Public Administration — structured syllabus, strong GS2 overlap.",
@@ -100,7 +100,7 @@ Paper 2: Ramesh K. Arora & Rajni Goyal — "Indian Public Administration"
 Thinkers: Taylor, Fayol, Weber, Simon, Maslow — master all.
 Timeline: Paper 1 — 2 months. Paper 2 — 2 months.
 Target: 290-310/500
-"""
+""",
     },
     "Sociology": {
         "context": "Sociology — conceptual, moderate syllabus, good scoring.",
@@ -110,7 +110,7 @@ Paper 2: Yogendra Singh — "Modernization of Indian Tradition"
 Thinkers: Marx, Durkheim, Weber, Parsons — master these first.
 Timeline: Paper 1 — 2 months. Paper 2 — 1.5 months.
 Target: 290-310/500
-"""
+""",
     },
     "Anthropology": {
         "context": "Anthropology — small syllabus, consistently high scoring.",
@@ -125,7 +125,7 @@ Paper 2 (Indian Anthropology + Tribal issues):
 Diagrams: Practice daily — they are mark multipliers.
 Timeline: Paper 1 — 2 months. Paper 2 — 1.5 months.
 Target: 300-330/500
-"""
+""",
     },
     "Political Science & International Relations": {
         "context": "PSIR — very popular optional, strong GS2/IR overlap, abundant material.",
@@ -140,7 +140,7 @@ Paper 2 (Comparative Politics + International Relations):
 Thinkers: Plato to Gramsci — crisp notes with quotes.
 Timeline: Paper 1 — 2 months. Paper 2 — 2 months.
 Target: 280-300/500
-"""
+""",
     },
     "Philosophy": {
         "context": "Philosophy — smallest syllabus, no current affairs, scoring if concepts are clear.",
@@ -154,7 +154,7 @@ Paper 2 (Socio-Political + Philosophy of Religion):
 Strength: tiny, fully static syllabus. Master concepts, write crisp.
 Timeline: Paper 1 — 1.5 months. Paper 2 — 1.5 months.
 Target: 270-300/500
-"""
+""",
     },
     "Economics": {
         "context": "Economics — analytical optional, ideal for those with the background.",
@@ -168,7 +168,7 @@ Paper 2 (Indian Economy):
 Practice: diagrams, derivations, and data/graphs are mark boosters.
 Timeline: Paper 1 — 2.5 months. Paper 2 — 2 months.
 Target: 270-300/500
-"""
+""",
     },
 }
 
@@ -216,45 +216,44 @@ def get_optional_context(optional: str) -> tuple[str, str]:
     if optional in OPTIONAL_CONTEXTS:
         d = OPTIONAL_CONTEXTS[optional]
         return d["context"], d["plan_instruction"]
-    
+
     if "Literature" in optional:
         lang = optional.replace(" Literature", "")
         return (
             f"{optional} — regional language optional. High scoring for native speakers.",
-            f"Use standard {lang} university textbooks. Find toppers who took {lang} Literature.\nTimeline: 2 months per paper. Target: 290-310/500"
+            f"Use standard {lang} university textbooks. Find toppers who took {lang} Literature.\nTimeline: 2 months per paper. Target: 290-310/500",
         )
-    
+
     return (
         f"{optional} — research specific toppers' strategies before starting.",
-        f"1. Download UPSC syllabus for {optional} from upsc.gov.in\n2. Find toppers' interviews\n3. Identify 2 standard books per paper\n4. Solve last 10 years PYQs"
+        f"1. Download UPSC syllabus for {optional} from upsc.gov.in\n2. Find toppers' interviews\n3. Identify 2 standard books per paper\n4. Solve last 10 years PYQs",
     )
 
 
 def get_weak_context(weak: str) -> str:
     """Get context for weak areas."""
     parts = [w.strip() for w in weak.split(",")]
-    return "\n".join([
-        f"• {p}: {WEAK_AREA_CONTEXTS.get(p, WEAK_AREA_CONTEXTS['Not specified'])}"
-        for p in parts
-    ])
+    return "\n".join(
+        [f"• {p}: {WEAK_AREA_CONTEXTS.get(p, WEAK_AREA_CONTEXTS['Not specified'])}" for p in parts]
+    )
 
 
 def get_weak_plan_instruction(weak: str, months_left: int) -> str:
     """Get plan instruction for weak areas based on time left."""
     parts = [w.strip() for w in weak.split(",")]
     results = []
-    
+
     if months_left <= 1:
         plan_template = "1-Week Emergency Sprint:\n- Days 1-3: Read only high-yield sections\n- Days 4-5: Solve PYQs only\n- Days 6-7: Revise notes"
     elif months_left <= 3:
         plan_template = "3-Week Recovery:\n- Week 1: Read recommended source + make notes\n- Week 2: Solve 5 years PYQs + fill gaps\n- Week 3: Full revision + timed practice"
     else:
         plan_template = "4-Week Recovery:\n- Week 1: Read chapter by chapter + one-page notes\n- Week 2: Solve 5 years PYQs + mark gaps\n- Week 3: Topic-wise mock tests + fill gaps\n- Week 4: Full revision + answer writing"
-    
+
     for p in parts:
         ctx = WEAK_AREA_CONTEXTS.get(p, WEAK_AREA_CONTEXTS["Not specified"])
         results.append(f"**{p}**\n{ctx}\n\n{plan_template}")
-    
+
     return "\n\n".join(results)
 
 

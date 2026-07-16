@@ -12,6 +12,7 @@ interface Msg {
 
 export function Upload() {
   const [processing, setProcessing] = useState(false)
+  const [stage, setStage] = useState("")
   const [error, setError] = useState("")
   const [doc, setDoc] = usePersistentState<UploadResult | null>("upload:doc", null)
   const [dragging, setDragging] = useState(false)
@@ -39,12 +40,13 @@ export function Upload() {
     setDoc(null)
     setMessages([])
     try {
-      const r = await api.uploadProcess(file)
+      const r = await api.uploadProcess(file, setStage)
       setDoc(r)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not process the PDF.")
     } finally {
       setProcessing(false)
+      setStage("")
     }
   }
 
@@ -156,6 +158,13 @@ export function Upload() {
             <span className="text-muted">Loaded:</span>
             <span className="font-medium text-fg">{bookTitle}</span>
           </div>
+        )}
+        {(stage === "queued" || stage === "running") && !error && (
+          <p className="text-sm text-muted">
+            {stage === "queued"
+              ? "Queued... waiting for a background worker."
+              : "Processing in the background... large files can take a minute."}
+          </p>
         )}
         {error && <p className="text-sm text-danger">{error}</p>}
       </Card>

@@ -1,4 +1,5 @@
 """Offline tests for vector-store source metadata propagation."""
+
 from src.core.vector_store import get_text_splitter
 
 
@@ -14,6 +15,7 @@ def test_text_splitter_accepts_source_metadata():
 
 def test_vector_store_create_signature_supports_metadata():
     import inspect
+
     from src.core.vector_store import create_vector_store
 
     sig = inspect.signature(create_vector_store)

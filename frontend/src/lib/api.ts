@@ -132,17 +132,6 @@ export interface MonitoringOverview {
   hourly: MonitoringHourPoint[]
 }
 
-export interface JobStatus {
-  job_id: string
-  type: string
-  status: "queued" | "running" | "done" | "failed"
-  progress: number
-  result: Record<string, unknown> | null
-  error: string | null
-  created_at: string | null
-  updated_at: string | null
-}
-
 export interface FeedbackInput {
   rating: "up" | "down"
   agent?: string
@@ -264,6 +253,23 @@ export interface LectureResult {
   questions_html: string
 }
 
+// Background jobs: heavy endpoints enqueue work and return a job id; the client
+// polls GET /jobs/{id} until the job is done (or errors).
+export type JobState = "queued" | "running" | "done" | "error"
+export interface JobStatus<T = unknown> {
+  job_id: string
+  type: string
+  status: JobState
+  result: T | null
+  error: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+interface EnqueueResponse {
+  job_id: string
+  status: JobState
+}
+
 export function getToken(): string {
   return localStorage.getItem(LS_TOKEN) || ""
 }
@@ -346,6 +352,37 @@ async function request<T>(
   if (!res.ok) throw new ApiError(res.status, await parseError(res))
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
+}
+
+// Poll a background job to completion. onStatus fires on each status change so
+// the UI can show "queued" vs "running". Resolves with the job result, or throws
+// an ApiError if the job errors or exceeds the timeout.
+async function pollJob<T>(
+  jobId: string,
+  onStatus?: (status: JobState) => void,
+  opts: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<T> {
+  const intervalMs = opts.intervalMs ?? 2000
+  const timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000
+  const started = Date.now()
+  let last: JobState | null = null
+  for (;;) {
+    const job = await request<JobStatus<T>>("/jobs/" + encodeURIComponent(jobId))
+    if (job.status !== last) {
+      last = job.status
+      onStatus?.(job.status)
+    }
+    if (job.status === "done") {
+      if (job.result == null)
+        throw new ApiError(500, "The job finished but returned no result.")
+      return job.result
+    }
+    if (job.status === "error")
+      throw new ApiError(500, job.error || "The background job failed. Please retry.")
+    if (Date.now() - started > timeoutMs)
+      throw new ApiError(504, "This is taking longer than expected. Please try again.")
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
 }
 
 export const api = {
@@ -479,13 +516,6 @@ export const api = {
     return request("/experiments/overview")
   },
 
-  // Async background jobs (#10): heavy Upload/Lecture work returns a job
-  // id; poll this until status is "done" (result holds the payload) or
-  // "failed". Use pollJob() below for the polling loop.
-  getJob(jobId: string): Promise<JobStatus> {
-    return request<JobStatus>("/jobs/" + encodeURIComponent(jobId))
-  },
-
   submitFeedback(input: FeedbackInput): Promise<{ id: string; rating: string }> {
     return request("/feedback/submit", {
       method: "POST",
@@ -511,7 +541,6 @@ export const api = {
   evaluateAnswer(input: {
     question: string
     answer: string
-    topic?: string
   }): Promise<{ response: string; structured: AnswerEvaluation }> {
     return request("/evaluator/evaluate/sync", {
       method: "POST",
@@ -524,7 +553,6 @@ export const api = {
     question: string
     answer: string
     marks?: number
-    topic?: string
     keywords?: string[]
     word_limit?: number
   }): Promise<{ response: string; structured: MainsEvaluation }> {
@@ -608,48 +636,58 @@ export const api = {
   pyqBankStatus(): Promise<PyqBankStatus> {
     return request<PyqBankStatus>("/pyq/bank/status")
   },
-  pyqBankUpload(file: File): Promise<PyqBankUploadResult> {
+  async pyqBankUpload(
+    file: File,
+    onStatus?: (status: JobState) => void,
+  ): Promise<PyqBankUploadResult> {
     const form = new FormData()
     form.append("file", file)
-    return request<PyqBankUploadResult>("/pyq/bank/upload", {
+    const { job_id } = await request<EnqueueResponse>("/pyq/bank/upload", {
       method: "POST",
       body: form,
     })
+    return pollJob<PyqBankUploadResult>(job_id, onStatus)
   },
   pyqBankClear(): Promise<Record<string, unknown>> {
     return request("/pyq/bank/clear", { method: "POST" })
   },
 
-  // ── Upload (PDF study notes) — sync=true returns the notes inline ──
-  uploadProcess(file: File): Promise<UploadResult> {
+  // ── Upload (PDF study notes) — runs as a background job, then polls ──
+  async uploadProcess(
+    file: File,
+    onStatus?: (status: JobState) => void,
+  ): Promise<UploadResult> {
     const form = new FormData()
     form.append("file", file)
-    return request<UploadResult>("/upload/process?sync=true", {
+    const { job_id } = await request<EnqueueResponse>("/upload/process", {
       method: "POST",
       body: form,
     })
+    return pollJob<UploadResult>(job_id, onStatus)
   },
 
-  // ── Lecture (YouTube / pasted transcript) — sync=true runs inline ──
-  lectureProcess(input: {
-    youtube_url: string
-    medium?: string
-  }): Promise<LectureResult> {
-    return request<LectureResult>("/lecture/process?sync=true", {
+  // ── Lecture (YouTube / pasted transcript) — runs as a background job, then polls ──
+  async lectureProcess(
+    input: { youtube_url: string; medium?: string },
+    onStatus?: (status: JobState) => void,
+  ): Promise<LectureResult> {
+    const { job_id } = await request<EnqueueResponse>("/lecture/process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+    return pollJob<LectureResult>(job_id, onStatus)
   },
-  lectureProcessText(input: {
-    transcript: string
-    medium?: string
-  }): Promise<LectureResult> {
-    return request<LectureResult>("/lecture/process-text?sync=true", {
+  async lectureProcessText(
+    input: { transcript: string; medium?: string },
+    onStatus?: (status: JobState) => void,
+  ): Promise<LectureResult> {
+    const { job_id } = await request<EnqueueResponse>("/lecture/process-text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+    return pollJob<LectureResult>(job_id, onStatus)
   },
 }
 
@@ -658,45 +696,9 @@ export interface MentorMessage {
   content: string
 }
 
-// Streaming mentor chat: POST /mentor/chat returns text/plain token stream.
-export async function streamMentor(
-  question: string,
-  history: MentorMessage[],
-  onChunk: (text: string) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  let res: Response
-  try {
-    res = await fetch(url("/mentor/chat"), {
-      method: "POST",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ question, chat_history: history }),
-      signal,
-    })
-  } catch {
-    onChunk(
-      "\n\n⚠️ Backend connection error. Is the API reachable at " + getApiBase() + "?",
-    )
-    return
-  }
-  if (!res.ok || !res.body) {
-    if (res.status === 401) onChunk("\n\n⚠️ Session expired. Please sign in again.")
-    else onChunk("\n\n⚠️ Error " + res.status + ": " + (await parseError(res)))
-    return
-  }
-  const reader = res.body.getReader()
-  const dec = new TextDecoder("utf-8")
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const piece = dec.decode(value, { stream: true })
-    if (piece) onChunk(piece)
-  }
-}
-
 // Generic text/plain token streamer for the agent endpoints that stream their
 // output (planner, pyq, ncert, current affairs, and the upload/lecture chats).
-// Mirrors streamMentor but takes an arbitrary path + JSON body.
+// Takes an arbitrary path + JSON body and streams the text/plain response.
 export async function streamAgent(
   path: string,
   body: unknown,
@@ -729,23 +731,5 @@ export async function streamAgent(
     if (done) break
     const piece = dec.decode(value, { stream: true })
     if (piece) onChunk(piece)
-  }
-}
-
-// Poll a background job until it finishes (or a timeout is hit). Calls
-// onUpdate on every tick so the UI can show live progress.
-export async function pollJob(
-  jobId: string,
-  opts: { intervalMs?: number; timeoutMs?: number; onUpdate?: (s: JobStatus) => void } = {},
-): Promise<JobStatus> {
-  const intervalMs = opts.intervalMs ?? 2000
-  const timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000
-  const start = Date.now()
-  for (;;) {
-    const s = await api.getJob(jobId)
-    opts.onUpdate?.(s)
-    if (s.status === "done" || s.status === "failed") return s
-    if (Date.now() - start > timeoutMs) return s
-    await new Promise((r) => setTimeout(r, intervalMs))
   }
 }

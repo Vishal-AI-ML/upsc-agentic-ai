@@ -6,14 +6,15 @@ exceptions. No LLM, no langchain, no vector store are imported, so this runs
 fully offline with no API key (importing src.graph.tools must stay
 dependency-free by design - heavy imports are lazy).
 """
+
 from src.graph.tools import (
     DEFAULT_TOOL_SYSTEM,
     TOOL_FUNCTIONS,
+    _compose_system,
+    _content_to_text,
+    _should_seed_question,
     run_tool_calls,
     web_search_tool_fn,
-    _content_to_text,
-    _compose_system,
-    _should_seed_question,
 )
 
 
@@ -41,14 +42,16 @@ def test_registry_names_match_structured_tool_contract():
 def test_dispatch_runs_tool_and_preserves_id():
     calls = [{"name": "web_search", "args": {"query": "prelims date"}, "id": "call_1"}]
     out = run_tool_calls(calls, registry=FAKE)
-    assert out == [
-        {"tool_call_id": "call_1", "name": "web_search", "content": "echo:prelims date"}
-    ]
+    assert out == [{"tool_call_id": "call_1", "name": "web_search", "content": "echo:prelims date"}]
 
 
 def test_dispatch_passes_multiple_kwargs():
     calls = [
-        {"name": "knowledge_base_search", "args": {"query": "polity", "persist_key": "ncert6"}, "id": "c2"}
+        {
+            "name": "knowledge_base_search",
+            "args": {"query": "polity", "persist_key": "ncert6"},
+            "id": "c2",
+        }
     ]
     out = run_tool_calls(calls, registry=FAKE)
     assert out[0]["content"] == "kb:polity:ncert6"
@@ -100,7 +103,6 @@ def test_empty_calls_returns_empty():
     assert run_tool_calls(None, registry=FAKE) == []
 
 
-
 # --- content normalization (Gemini returns content as a list of blocks) ---
 def test_content_to_text_passthrough_string():
     assert _content_to_text("hello world") == "hello world"
@@ -116,16 +118,13 @@ def test_content_to_text_flattens_gemini_blocks():
 
 def test_content_to_text_ignores_nontext_blocks_and_none():
     assert _content_to_text(None) == ""
-    assert (
-        _content_to_text([{"type": "image", "url": "x"}, {"type": "text", "text": "ok"}])
-        == "ok"
-    )
-
+    assert _content_to_text([{"type": "image", "url": "x"}, {"type": "text", "text": "ok"}]) == "ok"
 
 
 # --- question seeding on a (possibly checkpointed) thread ---
 class _FakeMsg:
     """Minimal duck-typed message: has .type and .content like langchain messages."""
+
     def __init__(self, type, content=""):
         self.type = type
         self.content = content
@@ -154,7 +153,6 @@ def test_seed_new_question_on_existing_thread():
 def test_no_seed_when_question_already_last_human():
     hist = [_FakeMsg("human", "When is UPSC Prelims 2026?")]
     assert _should_seed_question(hist, "When is UPSC Prelims 2026?") is False
-
 
 
 # --- truthfulness guardrail: no fabricating dated facts when search fails ---

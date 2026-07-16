@@ -2,11 +2,11 @@
 Upload routes - PDF processing and chat
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from src.schemas import ChatRequest, UploadChatRequest
-from src.agents.upload.graph import process_upload, ask_upload
+from src.agents.upload.graph import ask_upload, process_upload
+from src.schemas import UploadChatRequest
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
@@ -16,7 +16,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     """Upload and process a PDF file."""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    
+
     try:
         content = await file.read()
         result = process_upload(content, file.filename)
@@ -36,6 +36,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 @router.post("/chat")
 async def chat_upload(req: UploadChatRequest):
     """Chat about uploaded PDF."""
+
     def generate():
         for chunk in ask_upload(
             question=req.question,
@@ -44,7 +45,7 @@ async def chat_upload(req: UploadChatRequest):
             chat_history=req.chat_history,
         ):
             yield chunk
-    
+
     return StreamingResponse(generate(), media_type="text/plain")
 
 

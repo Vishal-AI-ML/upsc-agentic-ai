@@ -29,6 +29,7 @@ Usage::
     uv run python -m src.eval.retrieval_eval --k 5 --gate 0.7 --strict \
         --report src/eval/retrieval_eval_report.md
 """
+
 from __future__ import annotations
 
 import argparse
@@ -161,9 +162,7 @@ def dense_order(scored: list[tuple[Any, float | None]]) -> list[Any]:
     """Docs ordered by raw vector relevance score (None scores sink to the end)."""
     return [
         doc
-        for doc, _ in sorted(
-            scored, key=lambda ds: (ds[1] is not None, ds[1] or 0.0), reverse=True
-        )
+        for doc, _ in sorted(scored, key=lambda ds: (ds[1] is not None, ds[1] or 0.0), reverse=True)
     ]
 
 
@@ -205,9 +204,7 @@ def write_retrieval_report(
     ]
     for i, row in enumerate(rows, start=1):
         q = str(row.get("question", "")).replace("|", "\\|")[:90]
-        lines.append(
-            f"| {i} | {row.get('dense_rr', 0.0)} | {row.get('hybrid_rr', 0.0)} | {q} |"
-        )
+        lines.append(f"| {i} | {row.get('dense_rr', 0.0)} | {row.get('hybrid_rr', 0.0)} | {q} |")
     lines.extend(
         [
             "",
@@ -268,7 +265,9 @@ def run_retrieval_eval(
         try:
             scored = db.similarity_search_with_relevance_scores(question, k=k)
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Scored search failed for '%s' (%s); using plain search", persist_key, exc)
+            logger.warning(
+                "Scored search failed for '%s' (%s); using plain search", persist_key, exc
+            )
             scored = [(doc, None) for doc in db.similarity_search(question, k=k)]
 
         dflags = relevance_flags(
@@ -302,10 +301,18 @@ def run_retrieval_eval(
     ab = compare_summaries(dense_summary, hybrid_summary)
 
     print("\n" + "=" * 60)
-    print(f"RETRIEVAL EVAL (dense-only vs hybrid re-rank, k={k}, n={hybrid_summary['total_queries']})")
-    print(f"  MRR            dense {ab['mrr_dense']}  ->  hybrid {ab['mrr_hybrid']}  (lift {ab['mrr_lift']:+})")
-    print(f"  hit@{k}         dense {ab['hit_dense']}  ->  hybrid {ab['hit_hybrid']}  (lift {ab['hit_lift']:+})")
-    print(f"  precision@{k}   dense {dense_summary['precision_at_k']}  ->  hybrid {hybrid_summary['precision_at_k']}")
+    print(
+        f"RETRIEVAL EVAL (dense-only vs hybrid re-rank, k={k}, n={hybrid_summary['total_queries']})"
+    )
+    print(
+        f"  MRR            dense {ab['mrr_dense']}  ->  hybrid {ab['mrr_hybrid']}  (lift {ab['mrr_lift']:+})"
+    )
+    print(
+        f"  hit@{k}         dense {ab['hit_dense']}  ->  hybrid {ab['hit_hybrid']}  (lift {ab['hit_lift']:+})"
+    )
+    print(
+        f"  precision@{k}   dense {dense_summary['precision_at_k']}  ->  hybrid {hybrid_summary['precision_at_k']}"
+    )
     print("=" * 60)
 
     if report_path is not None:
@@ -313,13 +320,17 @@ def run_retrieval_eval(
         print(f"Report written: {report_path}")
 
     passed = hybrid_summary["passed"]
-    print(f"Hybrid MRR gate >= {gate}: {'PASS' if passed else 'FAIL'} (got {hybrid_summary['mrr']})")
+    print(
+        f"Hybrid MRR gate >= {gate}: {'PASS' if passed else 'FAIL'} (got {hybrid_summary['mrr']})"
+    )
     return passed
 
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(description="Retrieval-quality eval (hit@k / MRR / precision@k)")
+    parser = argparse.ArgumentParser(
+        description="Retrieval-quality eval (hit@k / MRR / precision@k)"
+    )
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--k", type=int, default=DEFAULT_K)
     parser.add_argument("--gate", type=float, default=DEFAULT_GATE)

@@ -15,6 +15,7 @@ Notes / honest limitations:
   topic-mastery + spaced-revision store is added; the shape is stable so the UI
   and API contract don't change when those land.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,8 +26,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user
-from src.core.db import get_db
 from src.core import models
+from src.core.db import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,7 @@ def _streak(active_days: set[str], today: date) -> tuple[int, int, bool]:
     if not active_days:
         return 0, 0, False
 
-    parsed = sorted(
-        {
-            datetime.strptime(d, "%Y-%m-%d").date()
-            for d in active_days
-            if d
-        }
-    )
+    parsed = sorted({datetime.strptime(d, "%Y-%m-%d").date() for d in active_days if d})
 
     # Longest run of consecutive calendar days.
     longest = 1
@@ -165,9 +160,7 @@ async def progress_overview(
         activity = [
             {
                 "date": (today - timedelta(days=i)).isoformat(),
-                "count": counts_by_day.get(
-                    (today - timedelta(days=i)).isoformat(), 0
-                ),
+                "count": counts_by_day.get((today - timedelta(days=i)).isoformat(), 0),
             }
             for i in range(_ACTIVITY_DAYS - 1, -1, -1)
         ]
@@ -176,9 +169,7 @@ async def progress_overview(
 
         # --- Questions (thumbs feedback as the available signal) ----------
         fb_total = (
-            db.query(func.count(models.Feedback.id))
-            .filter(models.Feedback.user_id == uid)
-            .scalar()
+            db.query(func.count(models.Feedback.id)).filter(models.Feedback.user_id == uid).scalar()
             or 0
         )
         fb_up = (

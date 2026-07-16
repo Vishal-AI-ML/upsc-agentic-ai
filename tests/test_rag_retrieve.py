@@ -9,6 +9,7 @@ Background:
 
 This test fails if that pattern ever comes back.
 """
+
 import inspect
 
 import src.graph.rag_graph as rag_graph
@@ -28,7 +29,7 @@ def test_rag_grader_failure_is_cautious():
     source = inspect.getsource(rag_graph.build_rag_subgraph)
     assert "assuming relevant" not in source
     assert "treating context as unverified" in source
-    assert "\"rag_relevant\": False" in source
+    assert '"rag_relevant": False' in source
 
 
 def test_rag_has_grounding_verification_step():
@@ -37,5 +38,6 @@ def test_rag_has_grounding_verification_step():
     assert "GroundingCheck" in inspect.getsource(rag_graph)
     # Step 10: citation formatting centralised into src.core.grounding
     import src.core.grounding as grounding
+
     assert "Sources used:" in inspect.getsource(grounding)
     assert "format_sources" in inspect.getsource(rag_graph)

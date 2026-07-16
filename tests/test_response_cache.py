@@ -3,6 +3,7 @@
 Network is never touched: ResponseCache._redis_command is replaced with an
 in-memory dict, so these run fully offline and deterministically.
 """
+
 from __future__ import annotations
 
 from src.core.response_cache import ResponseCache, _cache_key, _normalize
@@ -50,8 +51,11 @@ def test_set_then_get_roundtrip():
     cache = _mem_cache()
     assert cache.get(user_id="u1", thread_id="t1", question="Article 21?") is None
     cache.set(
-        user_id="u1", thread_id="t1", question="Article 21?",
-        answer="Right to life", route="mentor",
+        user_id="u1",
+        thread_id="t1",
+        question="Article 21?",
+        answer="Right to life",
+        route="mentor",
     )
     hit = cache.get(user_id="u1", thread_id="t1", question="  article 21  ")
     assert hit is not None
@@ -80,8 +84,10 @@ def test_empty_answer_not_cached():
 
 # --- semantic cache tests (Step 21) ---------------------------------------
 
+
 def _mem_semantic_cache(threshold: float = 0.8) -> ResponseCache:
     """In-memory ResponseCache in semantic mode with a deterministic embedder."""
+
     def emb(text: str):
         t = text.lower()
         return [
@@ -130,8 +136,13 @@ def _mem_semantic_cache(threshold: float = 0.8) -> ResponseCache:
 
 def test_semantic_hit_on_paraphrase():
     cache = _mem_semantic_cache()
-    cache.set(user_id="u1", thread_id="t1", question="What is Article 21?",
-              answer="Right to life", route="mentor")
+    cache.set(
+        user_id="u1",
+        thread_id="t1",
+        question="What is Article 21?",
+        answer="Right to life",
+        route="mentor",
+    )
     # Different wording, same meaning -> exact miss, semantic hit.
     hit = cache.get(user_id="u1", thread_id="t1", question="explain article 21")
     assert hit is not None
@@ -141,8 +152,13 @@ def test_semantic_hit_on_paraphrase():
 
 def test_semantic_miss_on_different_topic():
     cache = _mem_semantic_cache()
-    cache.set(user_id="u1", thread_id="t1", question="What is Article 21?",
-              answer="Right to life", route="mentor")
+    cache.set(
+        user_id="u1",
+        thread_id="t1",
+        question="What is Article 21?",
+        answer="Right to life",
+        route="mentor",
+    )
     # Unrelated question -> no exact key, cosine below threshold -> miss.
     assert cache.get(user_id="u1", thread_id="t1", question="What is GST?") is None
 
@@ -150,7 +166,6 @@ def test_semantic_miss_on_different_topic():
 def test_semantic_off_is_exact_only():
     cache = _mem_semantic_cache()
     cache.semantic = False  # disable the semantic fallback
-    cache.set(user_id="u1", thread_id="t1", question="What is Article 21?",
-              answer="Right to life")
+    cache.set(user_id="u1", thread_id="t1", question="What is Article 21?", answer="Right to life")
     # Paraphrase must NOT hit when semantic is off.
     assert cache.get(user_id="u1", thread_id="t1", question="explain article 21") is None

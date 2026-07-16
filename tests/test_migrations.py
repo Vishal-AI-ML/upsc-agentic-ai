@@ -8,6 +8,7 @@ with ``alembic revision --autogenerate``) surfaces the gap.
 Requires the ``alembic`` package (added to project deps in this step); the test
 is skipped automatically if it is not installed.
 """
+
 import pathlib
 import tempfile
 
@@ -29,8 +30,8 @@ def _make_config(db_url: str) -> Config:
 
 
 def _expected_tables() -> set[str]:
-    from src.core.db import Base
     from src.core import models  # noqa: F401  (registers tables)
+    from src.core.db import Base
 
     return set(Base.metadata.tables.keys())
 

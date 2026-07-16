@@ -5,13 +5,18 @@ NCERT routes - Study sessions and chat
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from src.schemas import (
-    NCERTSessionRequest, NCERTSessionResponse,
-    NCERTChatRequest, NCERTListResponse
-)
 from src.agents.ncert.graph import (
-    get_classes, get_subjects, get_chapters,
-    generate_study_session, ask_ncert
+    ask_ncert,
+    generate_study_session,
+    get_chapters,
+    get_classes,
+    get_subjects,
+)
+from src.schemas import (
+    NCERTChatRequest,
+    NCERTListResponse,
+    NCERTSessionRequest,
+    NCERTSessionResponse,
 )
 
 router = APIRouter(prefix="/ncert", tags=["NCERT"])
@@ -62,29 +67,17 @@ async def create_study_session(request: NCERTSessionRequest):
 @router.post("/chat")
 async def chat_ncert(request: NCERTChatRequest):
     """Chat about NCERT chapter (streaming)."""
+
     def generate():
         for chunk in ask_ncert(
             question=request.question,
             class_name=request.class_name,
             subject=request.subject,
             chapter=request.chapter,
-            chat_history=[m.model_dump() for m in request.chat_history] if request.chat_history else None,
+            chat_history=[m.model_dump() for m in request.chat_history]
+            if request.chat_history
+            else None,
         ):
             yield chunk
-    
+
     return StreamingResponse(generate(), media_type="text/plain")
-
-
-@router.post("/chat/sync")
-async def chat_ncert_sync(request: NCERTChatRequest):
-    """Chat about NCERT chapter (non-streaming)."""
-    response = ""
-    for chunk in ask_ncert(
-        question=request.question,
-        class_name=request.class_name,
-        subject=request.subject,
-        chapter=request.chapter,
-        chat_history=[m.model_dump() for m in request.chat_history] if request.chat_history else None,
-    ):
-        response += chunk
-    return {"response": response}

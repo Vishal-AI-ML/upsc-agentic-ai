@@ -13,6 +13,7 @@ Design goals (mirrors observability.py):
   0.0 (only error events are sent), which keeps you inside the free
   Developer plan (5K errors/month).
 """
+
 import logging
 from functools import lru_cache
 
@@ -38,8 +39,8 @@ def init_sentry() -> bool:
         return False
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.starlette import StarletteIntegration
         from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
 
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
@@ -71,3 +72,15 @@ def capture_exception(exc: BaseException) -> None:
         sentry_sdk.capture_exception(exc)
     except Exception:  # noqa: BLE001 - capture must never raise
         logger.debug("Sentry capture_exception skipped", exc_info=True)
+
+
+def set_request_context(request_id: str) -> None:
+    """Tag the current Sentry scope with the request ID (best-effort; no-op if off)."""
+    if not sentry_enabled():
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.set_tag("request_id", request_id)
+    except Exception:  # noqa: BLE001 - tagging must never raise
+        logger.debug("Sentry set_tag skipped", exc_info=True)

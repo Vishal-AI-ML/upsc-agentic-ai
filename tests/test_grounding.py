@@ -9,15 +9,16 @@ Also covers the two integration seams that must stay honest:
 * a hardened knowledge-base result must still yield a clean citation (its
   ``[UNTRUSTED ...]`` guard banner must NOT be mis-read as a source).
 """
+
 from src.core.grounding import (
-    source_label,
-    format_sources,
-    format_trust_note,
-    derive_confidence,
-    extract_web_citations,
+    MAX_CITATIONS,
     citations_from_tool_messages,
     compose_grounded_answer,
-    MAX_CITATIONS,
+    derive_confidence,
+    extract_web_citations,
+    format_sources,
+    format_trust_note,
+    source_label,
 )
 
 
@@ -55,7 +56,9 @@ def test_format_sources_empty_returns_blank():
 
 
 def test_format_sources_mixed_dict_and_string():
-    text = format_sources([{"metadata": {"source_title": "NCERT"}}, "web \u2014 https://upsc.gov.in"])
+    text = format_sources(
+        [{"metadata": {"source_title": "NCERT"}}, "web \u2014 https://upsc.gov.in"]
+    )
     assert "Sources used:" in text
     assert "NCERT" in text
     assert "https://upsc.gov.in" in text

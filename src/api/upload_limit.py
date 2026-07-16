@@ -7,6 +7,7 @@ Too Large, bina file ko memory mein load kiye.
 Ye sirf un paths par lagta hai jinme 'upload' aata hai, taaki normal
 chhote JSON requests par koi asar na ho.
 """
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -36,8 +37,7 @@ class MaxUploadSizeMiddleware(BaseHTTPMiddleware):
                             status_code=413,
                             content={
                                 "detail": (
-                                    f"File too large. Maximum allowed size is "
-                                    f"{self.max_mb} MB."
+                                    f"File too large. Maximum allowed size is {self.max_mb} MB."
                                 )
                             },
                         )

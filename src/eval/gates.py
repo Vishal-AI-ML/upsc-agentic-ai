@@ -21,6 +21,7 @@ What lives here:
   * ``write_markdown_report``- render the summary, per-agent table, and strict
                               gate result as Markdown evidence.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -146,11 +147,13 @@ def summarize_by_agent(
             summary["failures"] = (
                 []
                 if summary["passed"]
-                else [{
-                    "metric": "faithfulness",
-                    "value": summary["faithfulness"],
-                    "threshold": faithfulness_gate,
-                }]
+                else [
+                    {
+                        "metric": "faithfulness",
+                        "value": summary["faithfulness"],
+                        "threshold": faithfulness_gate,
+                    }
+                ]
             )
         out[agent] = summary
     return out
@@ -206,9 +209,7 @@ def write_markdown_report(
             lines.append("")
             lines.append("Failing metrics:")
             for f in failures:
-                lines.append(
-                    f"- {f['metric']}: {f['value']} < {f['threshold']}"
-                )
+                lines.append(f"- {f['metric']}: {f['value']} < {f['threshold']}")
 
     if per_agent:
         lines += [

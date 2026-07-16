@@ -18,6 +18,7 @@ empty, the app behaves exactly as before (Gemini only).
 import logging
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+
 from src.core.config import settings
 from src.core.observability import langchain_callbacks
 
@@ -28,8 +29,14 @@ _fast_llm_instance = None
 
 
 def _with_tracing(model, model_name: str):
-    """Attach Langfuse callbacks if enabled; else return model unchanged."""
-    cbs = langchain_callbacks()
+    """Attach usage-tracking + Langfuse callbacks; unchanged if none apply."""
+    cbs = list(langchain_callbacks() or [])
+    try:
+        from src.core.usage_tracker import get_usage_callback
+
+        cbs.append(get_usage_callback())
+    except Exception:
+        logger.debug("usage callback unavailable", exc_info=True)
     if cbs:
         return model.with_config({"callbacks": cbs, "tags": ["upsc-ai", model_name]})
     return model
@@ -60,8 +67,7 @@ def _make_groq(model_name: str, temperature: float):
         from langchain_groq import ChatGroq
     except ImportError:
         logger.warning(
-            "langchain-groq not installed; Groq fallback disabled. "
-            "Run: uv add langchain-groq"
+            "langchain-groq not installed; Groq fallback disabled. Run: uv add langchain-groq"
         )
         return None
     try:
@@ -105,11 +111,22 @@ def get_llm():
     """
     global _llm_instance
     if _llm_instance is None:
-        _llm_instance = _chain_with_fallbacks([
-            ("gemini/" + settings.llm_model, _make_gemini(settings.llm_model, settings.llm_temperature)),
-            ("gemini/" + settings.llm_fast_model, _make_gemini(settings.llm_fast_model, settings.llm_temperature)),
-            ("groq/" + settings.groq_model, _make_groq(settings.groq_model, settings.llm_temperature)),
-        ])
+        _llm_instance = _chain_with_fallbacks(
+            [
+                (
+                    "gemini/" + settings.llm_model,
+                    _make_gemini(settings.llm_model, settings.llm_temperature),
+                ),
+                (
+                    "gemini/" + settings.llm_fast_model,
+                    _make_gemini(settings.llm_fast_model, settings.llm_temperature),
+                ),
+                (
+                    "groq/" + settings.groq_model,
+                    _make_groq(settings.groq_model, settings.llm_temperature),
+                ),
+            ]
+        )
     return _llm_instance
 
 
@@ -121,11 +138,13 @@ def get_fast_llm():
     """
     global _fast_llm_instance
     if _fast_llm_instance is None:
-        _fast_llm_instance = _chain_with_fallbacks([
-            ("gemini/" + settings.llm_fast_model, _make_gemini(settings.llm_fast_model, 0.2)),
-            ("groq/" + settings.groq_fast_model, _make_groq(settings.groq_fast_model, 0.2)),
-            ("gemini/" + settings.llm_model, _make_gemini(settings.llm_model, 0.2)),
-        ])
+        _fast_llm_instance = _chain_with_fallbacks(
+            [
+                ("gemini/" + settings.llm_fast_model, _make_gemini(settings.llm_fast_model, 0.2)),
+                ("groq/" + settings.groq_fast_model, _make_groq(settings.groq_fast_model, 0.2)),
+                ("gemini/" + settings.llm_model, _make_gemini(settings.llm_model, 0.2)),
+            ]
+        )
     return _fast_llm_instance
 
 

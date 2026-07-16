@@ -4,6 +4,7 @@ Mirrors reset_tokens.py. The raw token is emailed once (in the verification
 link). Only its SHA-256 hash is stored, so a DB leak cannot be used to verify
 (hijack) an account.
 """
+
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone

@@ -8,8 +8,9 @@ These lock in two guarantees so a future refactor can't silently regress them:
 Everything runs against the throwaway SQLite DB booted by the ``client`` fixture;
 the verification email is monkeypatched so no network/SMTP is touched.
 """
+
 import uuid
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 AUTH = "/api/v1/auth"
 HIST = "/api/v1/history"
@@ -20,6 +21,7 @@ def _signup(client, monkeypatch, password="secret123"):
     email = f"sec_{uuid.uuid4().hex[:10]}@example.com"
     captured = {}
     import src.api.routes.auth as auth_mod
+
     monkeypatch.setattr(
         auth_mod,
         "send_verification_email",
@@ -55,16 +57,12 @@ def test_user_cannot_read_others_conversation(client, monkeypatch):
     convo_id = saved.json()["conversation_id"]
 
     # A can read own messages.
-    own = client.get(
-        f"{HIST}/conversations/{convo_id}/messages", headers=_bearer(a_access)
-    )
+    own = client.get(f"{HIST}/conversations/{convo_id}/messages", headers=_bearer(a_access))
     assert own.status_code == 200
     assert any("private note" in m["content"] for m in own.json()["messages"])
 
     # B must NOT be able to read A's conversation (IDOR blocked -> 404).
-    stolen = client.get(
-        f"{HIST}/conversations/{convo_id}/messages", headers=_bearer(b_access)
-    )
+    stolen = client.get(f"{HIST}/conversations/{convo_id}/messages", headers=_bearer(b_access))
     assert stolen.status_code == 404
 
     # And A's conversation must not leak into B's own list.

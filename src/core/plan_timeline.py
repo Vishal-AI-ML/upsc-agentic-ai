@@ -5,6 +5,7 @@ inline while streaming. That logic is CODE-derived (not model output), so it can
 live in a pure, offline-testable helper and be exposed as structured
 StudyPlanMeta. `dateutil` is optional (guarded) so this stays import-light.
 """
+
 import re
 from datetime import datetime
 

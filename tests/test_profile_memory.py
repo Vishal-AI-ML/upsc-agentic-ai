@@ -1,4 +1,5 @@
 """Offline tests for deterministic student-profile personalization helpers."""
+
 from src.graph.profile import extract_student_profile_signals, merge_student_profile
 
 

@@ -5,6 +5,7 @@ These assert the FAIL-OPEN contract: when the optional libs / LLM are missing
 They import retrieval.py directly (stdlib-only at module top) so they run even
 when langchain / sentence-transformers are not installed.
 """
+
 import importlib.util
 import os
 

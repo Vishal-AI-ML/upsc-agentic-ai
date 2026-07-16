@@ -2,16 +2,18 @@
 PYQ Agent - AI question generation, smart parser, hints, explanations
 """
 
-import os
-import re
 import json
 import logging
+import os
+import re
 
-from src.core.llm import get_llm
 from src.agents.pyq.prompts import (
-    QUESTION_GEN_PROMPT, PARSER_PROMPT, HINT_PROMPT, EXPLANATION_PROMPT,
-    VERIFY_PROMPT, BANK_GEN_PROMPT,
+    BANK_GEN_PROMPT,
+    PARSER_PROMPT,
+    QUESTION_GEN_PROMPT,
+    VERIFY_PROMPT,
 )
+from src.core.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +41,69 @@ _MAINS_EXEMPLARS = {
 }
 
 _SUBJECT_KEYWORDS = {
-    "polity": ["constitution", "right", "parliament", "judiciary", "amendment", "panchayat", "governance", "federal"],
-    "history": ["history", "revolt", "congress", "gandhi", "movement", "ancient", "medieval", "modern", "freedom"],
-    "geography": ["monsoon", "river", "soil", "climate", "mineral", "geography", "vegetation", "agriculture"],
-    "economy": ["bank", "monetary", "fiscal", "budget", "inflation", "economy", "gdp", "trade", "tax"],
-    "environment": ["biodiversity", "environment", "climate change", "pollution", "ecology", "wildlife", "species", "renewable"],
-    "science": ["space", "isro", "technology", "biotech", "nuclear", "science", " ai", "defence", "telecom"],
+    "polity": [
+        "constitution",
+        "right",
+        "parliament",
+        "judiciary",
+        "amendment",
+        "panchayat",
+        "governance",
+        "federal",
+    ],
+    "history": [
+        "history",
+        "revolt",
+        "congress",
+        "gandhi",
+        "movement",
+        "ancient",
+        "medieval",
+        "modern",
+        "freedom",
+    ],
+    "geography": [
+        "monsoon",
+        "river",
+        "soil",
+        "climate",
+        "mineral",
+        "geography",
+        "vegetation",
+        "agriculture",
+    ],
+    "economy": [
+        "bank",
+        "monetary",
+        "fiscal",
+        "budget",
+        "inflation",
+        "economy",
+        "gdp",
+        "trade",
+        "tax",
+    ],
+    "environment": [
+        "biodiversity",
+        "environment",
+        "climate change",
+        "pollution",
+        "ecology",
+        "wildlife",
+        "species",
+        "renewable",
+    ],
+    "science": [
+        "space",
+        "isro",
+        "technology",
+        "biotech",
+        "nuclear",
+        "science",
+        " ai",
+        "defence",
+        "telecom",
+    ],
     "ethics": ["ethic", "attitude", "integrity", "emotional", "values", "aptitude"],
     "ir": ["international", "bilateral", "neighbour", "foreign", "diplomacy", "relations"],
 }
@@ -55,8 +114,11 @@ def _pick_exemplars(topic: str, question_type: str) -> str:
     t = (topic or "").lower()
     is_prelims = question_type.lower() in ("mcq", "prelims", "objective")
     table = _PRELIMS_EXEMPLARS if is_prelims else _MAINS_EXEMPLARS
-    matched = [table[subj] for subj, kws in _SUBJECT_KEYWORDS.items()
-               if subj in table and any(kw in t for kw in kws)]
+    matched = [
+        table[subj]
+        for subj, kws in _SUBJECT_KEYWORDS.items()
+        if subj in table and any(kw in t for kw in kws)
+    ]
     if not matched:
         matched = list(table.values())[:2]
     return "\n\n".join(f"- {ex}" for ex in matched[:2])
@@ -89,19 +151,28 @@ def generate_questions(
     if not topic or not topic.strip():
         yield "Please provide a topic to generate questions."
         return
-    
-    yield "> ⚠️ AI-generated practice questions - always verify the answers against a standard source." + chr(10) + chr(10)
+
+    yield (
+        "> ⚠️ AI-generated practice questions - always verify the answers against a standard source."
+        + chr(10)
+        + chr(10)
+    )
     try:
         chain = QUESTION_GEN_PROMPT | get_llm()
         # Pass 1: generate (grounded on UPSC-style exemplars)
-        raw = (chain.invoke({
-            "topic": topic.strip(),
-            "question_type": question_type,
-            "difficulty": difficulty,
-            "num_questions": num_questions,
-            "marks": marks,
-            "exemplars": _pick_exemplars(topic, question_type),
-        }).content or "")
+        raw = (
+            chain.invoke(
+                {
+                    "topic": topic.strip(),
+                    "question_type": question_type,
+                    "difficulty": difficulty,
+                    "num_questions": num_questions,
+                    "marks": marks,
+                    "exemplars": _pick_exemplars(topic, question_type),
+                }
+            ).content
+            or ""
+        )
         # Pass 2: self-check / fact-verify before showing the student
         verified = _self_check(raw)
         # Stream out in line-sized chunks so the response still feels responsive
@@ -149,7 +220,7 @@ def _first_json_blob(s: str):
         elif ch in "]}":
             depth -= 1
             if depth == 0:
-                return s[start:j + 1]
+                return s[start : j + 1]
     return None
 
 
@@ -213,10 +284,20 @@ def _parse_block(block: str):
     mm = re.search(r"(\d{1,3})\s*marks", block, re.IGNORECASE)
     marks = int(mm.group(1)) if mm else None
     if len(options) >= 2:
-        return {"question": question, "type": "prelims",
-                "options": options, "answer": answer, "marks": marks}
-    return {"question": question, "type": "mains",
-            "options": None, "answer": answer, "marks": marks or 10}
+        return {
+            "question": question,
+            "type": "prelims",
+            "options": options,
+            "answer": answer,
+            "marks": marks,
+        }
+    return {
+        "question": question,
+        "type": "mains",
+        "options": None,
+        "answer": answer,
+        "marks": marks or 10,
+    }
 
 
 def _regex_parse(text: str):
@@ -272,76 +353,76 @@ def parse_questions(text: str) -> list[dict]:
     return _coerce_questions(_regex_parse(text))
 
 
-def get_hint(question: str, options: list[str]):
-    """Get strategic hint for MCQ (streaming)."""
-    if not question or not question.strip():
-        yield "Please provide a question."
-        return
-    
-    options_text = "\n".join([f"({chr(97+i)}) {opt}" for i, opt in enumerate(options)])
-    
-    try:
-        chain = HINT_PROMPT | get_llm()
-        for chunk in chain.stream({
-            "question": question.strip(),
-            "options": options_text,
-        }):
-            if hasattr(chunk, "content"):
-                yield chunk.content
-    except Exception as e:
-        logger.error(f"Hint generation failed: {e}")
-        yield "Could not generate hint. Please try again."
-
-
-def get_explanation(question: str, options: list[str], answer: str):
-    """Get detailed explanation for MCQ (streaming)."""
-    if not question or not question.strip():
-        yield "Please provide a question."
-        return
-    
-    options_text = "\n".join([f"({chr(97+i)}) {opt}" for i, opt in enumerate(options)])
-    
-    yield "> ⚠️ AI-generated explanation - verify the correct answer and facts against a standard source before trusting them." + chr(10) + chr(10)
-    try:
-        chain = EXPLANATION_PROMPT | get_llm()
-        for chunk in chain.stream({
-            "question": question.strip(),
-            "options": options_text,
-            "answer": answer,
-        }):
-            if hasattr(chunk, "content"):
-                yield chunk.content
-    except Exception as e:
-        logger.error(f"Explanation generation failed: {e}")
-        yield "Could not generate explanation. Please try again."
-
-
 PRELIMS_TOPICS = [
-    "Fundamental Rights", "Directive Principles", "Constitutional Amendments",
-    "Parliament Procedures", "Judiciary System", "Panchayati Raj",
-    "Constitutional Bodies", "Emergency Provisions",
-    "Revolt of 1857", "Indian National Congress", "Gandhi Movements",
-    "Revolutionary Movements", "Socio-Religious Reforms", "Post-Independence",
-    "Monsoon System", "Indian Rivers", "Soil Types", "Natural Vegetation",
-    "Mineral Resources", "Agriculture Patterns", "Climate Regions",
-    "Banking System", "Monetary Policy", "Fiscal Policy", "Budget Concepts",
-    "Inflation Types", "Balance of Payments", "Economic Reforms",
-    "Biodiversity Hotspots", "Protected Areas", "Climate Change",
-    "Environmental Conventions", "Pollution Control", "Renewable Energy",
-    "Space Missions", "Defence Technology", "Biotechnology",
-    "Nuclear Energy", "IT and Telecom", "Health and Disease",
+    "Fundamental Rights",
+    "Directive Principles",
+    "Constitutional Amendments",
+    "Parliament Procedures",
+    "Judiciary System",
+    "Panchayati Raj",
+    "Constitutional Bodies",
+    "Emergency Provisions",
+    "Revolt of 1857",
+    "Indian National Congress",
+    "Gandhi Movements",
+    "Revolutionary Movements",
+    "Socio-Religious Reforms",
+    "Post-Independence",
+    "Monsoon System",
+    "Indian Rivers",
+    "Soil Types",
+    "Natural Vegetation",
+    "Mineral Resources",
+    "Agriculture Patterns",
+    "Climate Regions",
+    "Banking System",
+    "Monetary Policy",
+    "Fiscal Policy",
+    "Budget Concepts",
+    "Inflation Types",
+    "Balance of Payments",
+    "Economic Reforms",
+    "Biodiversity Hotspots",
+    "Protected Areas",
+    "Climate Change",
+    "Environmental Conventions",
+    "Pollution Control",
+    "Renewable Energy",
+    "Space Missions",
+    "Defence Technology",
+    "Biotechnology",
+    "Nuclear Energy",
+    "IT and Telecom",
+    "Health and Disease",
 ]
 
 MAINS_TOPICS = [
-    "Indian Culture and Heritage", "Modern Indian History", "World History",
-    "Indian Society", "Women and Population", "Urbanization",
-    "Indian Constitution", "Governance Issues", "Social Justice",
-    "International Relations", "India and Neighbours", "Bilateral Relations",
-    "Indian Economy", "Agriculture Issues", "Infrastructure",
-    "Science and Technology", "Environment and Ecology", "Disaster Management",
-    "Internal Security", "Cyber Security",
-    "Ethics Basics", "Attitude and Aptitude", "Civil Service Values",
-    "Emotional Intelligence", "Case Studies", "Ethical Dilemmas",
+    "Indian Culture and Heritage",
+    "Modern Indian History",
+    "World History",
+    "Indian Society",
+    "Women and Population",
+    "Urbanization",
+    "Indian Constitution",
+    "Governance Issues",
+    "Social Justice",
+    "International Relations",
+    "India and Neighbours",
+    "Bilateral Relations",
+    "Indian Economy",
+    "Agriculture Issues",
+    "Infrastructure",
+    "Science and Technology",
+    "Environment and Ecology",
+    "Disaster Management",
+    "Internal Security",
+    "Cyber Security",
+    "Ethics Basics",
+    "Attitude and Aptitude",
+    "Civil Service Values",
+    "Emotional Intelligence",
+    "Case Studies",
+    "Ethical Dilemmas",
 ]
 
 
@@ -355,18 +436,18 @@ def get_topic_suggestions(question_type: str = "mcq") -> list[str]:
 def process_question_batch(questions: list[dict]) -> list[dict]:
     """Add hints and analysis to a batch of questions."""
     results = []
-    
+
     for q in questions:
         result = q.copy()
-        
+
         if not result.get("topic"):
             result["topic"] = "General"
-        
+
         if not result.get("paper"):
             result["paper"] = "Prelims" if result.get("type") in ("mcq", "prelims") else "Mains"
-        
+
         results.append(result)
-    
+
     return results
 
 
@@ -376,9 +457,11 @@ def process_question_batch(questions: list[dict]) -> list[dict]:
 # the AI generates fresh practice questions grounded on that material.
 # ─────────────────────────────────────────
 
+
 def _bank_key(user_id: str) -> str:
     """Persist key for a user's personal PYQ bank (one bank per user)."""
     from src.core.vector_store import make_persist_key
+
     return make_persist_key("pyqbank", str(user_id or "anon"))
 
 
@@ -391,7 +474,12 @@ def build_question_bank(file_content: bytes, filename: str, user_id: str) -> dic
 
     docs = get_text_splitter().create_documents([text])
     for d in docs:
-        d.metadata = {"source_type": "pyq_bank", "source_title": filename, "filename": filename, "pdf_hash": pdf_hash}
+        d.metadata = {
+            "source_type": "pyq_bank",
+            "source_title": filename,
+            "filename": filename,
+            "pdf_hash": pdf_hash,
+        }
 
     # Append to the user's bank collection (auto-created on first upload).
     upsert_documents(_bank_key(user_id), docs, rebuild=False)
@@ -409,15 +497,18 @@ def build_question_bank(file_content: bytes, filename: str, user_id: str) -> dic
 def get_bank_status(user_id: str) -> dict:
     """Whether the user has a personal PYQ bank yet."""
     from src.core.vector_store import vector_store_exists
+
     return {"exists": vector_store_exists(_bank_key(user_id))}
 
 
 def clear_bank(user_id: str) -> dict:
     """Delete the user's personal PYQ bank (Qdrant collection or local Chroma dir)."""
     from src.core.vector_store import _use_qdrant, collection_for, persist_dir_for
+
     key = _bank_key(user_id)
     if _use_qdrant():
         from src.core.vector_store import get_qdrant_client
+
         client = get_qdrant_client()
         name = collection_for(key)
         existed = client.collection_exists(name)
@@ -426,6 +517,7 @@ def clear_bank(user_id: str) -> dict:
             logger.info(f"PYQ bank cleared (user={user_id}, collection={name})")
         return {"cleared": existed}
     import shutil
+
     persist_dir = persist_dir_for(key)
     existed = os.path.exists(persist_dir)
     if existed:
@@ -458,32 +550,37 @@ def _generate_grounded(
     from src.core.vector_store import load_vector_store, similarity_search, vector_store_exists
 
     if not vector_store_exists(persist_key):
-        yield "> \U0001F4ED " + empty_msg + chr(10)
+        yield "> \U0001f4ed " + empty_msg + chr(10)
         return
 
     try:
         db = load_vector_store(persist_key)
     except Exception as e:
         logger.error(f"Grounded gen load failed ({label}): {e}")
-        yield "> \u26A0\uFE0F " + open_fail_msg + chr(10)
+        yield "> \u26a0\ufe0f " + open_fail_msg + chr(10)
         return
 
     query = (topic or "").strip() or default_query
     ctx = similarity_search(db, query, k=8, label=label)
     if not ctx:
-        yield "> \U0001F4ED " + no_match_msg + chr(10)
+        yield "> \U0001f4ed " + no_match_msg + chr(10)
         return
 
     yield "> \u2705 " + banner + chr(10) + chr(10)
     try:
         chain = BANK_GEN_PROMPT | get_llm()
-        raw = (chain.invoke({
-            "context": ctx,
-            "topic": (topic or "").strip() or default_topic,
-            "question_type": question_type,
-            "num_questions": num_questions,
-            "marks": marks,
-        }).content or "")
+        raw = (
+            chain.invoke(
+                {
+                    "context": ctx,
+                    "topic": (topic or "").strip() or default_topic,
+                    "question_type": question_type,
+                    "num_questions": num_questions,
+                    "marks": marks,
+                }
+            ).content
+            or ""
+        )
         verified = _self_check(raw)
         for line in verified.splitlines(keepends=True):
             yield line
@@ -503,47 +600,25 @@ def generate_from_bank(
     """Generate practice questions GROUNDED on the user's own uploaded PYQ bank (streaming)."""
     yield from _generate_grounded(
         _bank_key(user_id),
-        topic, question_type, num_questions, marks,
+        topic,
+        question_type,
+        num_questions,
+        marks,
         label="pyqbank",
-        banner=("Grounded on YOUR uploaded question bank - these mirror the real PYQs you "
-                "provided. Always cross-check answers with a standard source."),
-        empty_msg=("You haven't uploaded any question paper yet. Upload a PYQ PDF to build "
-                   "your personal bank, then generate grounded practice questions."),
-        no_match_msg=("Your bank doesn't seem to cover this topic. Try a different topic or "
-                      "upload more papers."),
+        banner=(
+            "Grounded on YOUR uploaded question bank - these mirror the real PYQs you "
+            "provided. Always cross-check answers with a standard source."
+        ),
+        empty_msg=(
+            "You haven't uploaded any question paper yet. Upload a PYQ PDF to build "
+            "your personal bank, then generate grounded practice questions."
+        ),
+        no_match_msg=(
+            "Your bank doesn't seem to cover this topic. Try a different topic or "
+            "upload more papers."
+        ),
         open_fail_msg="Could not open your question bank. Please re-upload your PDF.",
         fail_msg="Could not generate questions from your bank. Please try again.",
         default_query="important previous year UPSC questions",
         default_topic="the uploaded papers",
-    )
-
-
-def generate_from_lecture(
-    video_id: str,
-    topic: str = "",
-    question_type: str = "mcq",
-    num_questions: int = 5,
-    marks: int = 10,
-    difficulty: str = "medium",
-):
-    """Generate practice questions GROUNDED on a processed YouTube lecture (streaming).
-
-    Reuses the vector store the lecture agent already built (key: lecture:<video_id>),
-    so the questions come straight from that video's own content.
-    """
-    from src.core.vector_store import make_persist_key
-    yield from _generate_grounded(
-        make_persist_key("lecture", str(video_id)),
-        topic, question_type, num_questions, marks,
-        label="lecture-pyq",
-        banner=("Grounded on the lecture you studied - these questions come straight from that "
-                "video's content. Always cross-check key facts with a standard source."),
-        empty_msg=("Process a YouTube lecture first (in the Lecture section), then generate "
-                   "practice questions from it here."),
-        no_match_msg=("This lecture doesn't seem to cover that topic. Try a broader topic or "
-                      "leave it blank for mixed questions."),
-        open_fail_msg="Could not open this lecture's content. Please re-process the video.",
-        fail_msg="Could not generate questions from this lecture. Please try again.",
-        default_query="key concepts and important points from this lecture",
-        default_topic="this lecture",
     )

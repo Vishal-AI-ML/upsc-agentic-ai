@@ -3,6 +3,7 @@
 All pure (stdlib only) -> run in the offline CI ``tests`` job, no API key or
 vector store required.
 """
+
 from dataclasses import dataclass
 
 from src.core.retrieval import (
@@ -52,9 +53,9 @@ def test_rrf_promotes_lexically_relevant_over_top_vector():
     # X has the best vector score but zero lexical overlap; Y is rank-2 dense but
     # rank-1 lexical -> RRF lifts Y to the top with strictly ordered scores.
     rows = [
-        (Doc("quantum sports unrelated matter"), 0.9),   # X
+        (Doc("quantum sports unrelated matter"), 0.9),  # X
         (Doc("science curiosity discovery observation"), 0.7),  # Y
-        (Doc("science only here"), 0.6),                  # Z
+        (Doc("science only here"), 0.6),  # Z
     ]
     ranked = rerank_scored_documents(rows, "science curiosity discovery")
     assert ranked[0]["doc"].page_content == "science curiosity discovery observation"
@@ -89,8 +90,8 @@ def test_rerank_handles_all_none_scores():
 # --------------------------------------------------------------------------- #
 def test_rewrite_query_splits_compounds_and_expands_abbreviations():
     out = rewrite_query("prime-minister UPSC").lower()
-    assert "prime" in out and "minister" in out            # hyphen split
-    assert "union public service commission" in out        # abbreviation expanded
+    assert "prime" in out and "minister" in out  # hyphen split
+    assert "union public service commission" in out  # abbreviation expanded
 
 
 def test_rewrite_query_empty_is_safe():
@@ -106,7 +107,10 @@ def test_query_concepts_group_surface_forms():
 
 def test_concept_coverage_matches_expansion_without_dilution():
     # Doc uses the full form, query uses the abbreviation -> still fully covered.
-    assert concept_coverage_score("UPSC syllabus", "the union public service commission syllabus") == 1.0
+    assert (
+        concept_coverage_score("UPSC syllabus", "the union public service commission syllabus")
+        == 1.0
+    )
     # Doc uses the abbreviation directly -> covered, not diluted by the expansion.
     assert concept_coverage_score("UPSC", "UPSC exam notes") == 1.0
     # Plain query with no expansions behaves like term coverage.

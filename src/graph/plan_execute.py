@@ -23,6 +23,7 @@ Only stdlib + pydantic at module top level (so the offline verifier can import
 this file directly); langchain / langgraph / settings / tools are imported
 lazily inside the builder.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,9 +39,17 @@ DEFAULT_MAX_CONCURRENCY = 3  # bounded parallel sub-step fan-out (cost guard)
 
 # Multi-part cues that signal a question is worth decomposing even when short.
 _MULTIPART_CUES = (
-    "compare", "contrast", "difference between", "differentiate",
-    "as well as", "along with", "and also", "advantages and disadvantages",
-    "pros and cons", "merits and demerits", "causes and consequences",
+    "compare",
+    "contrast",
+    "difference between",
+    "differentiate",
+    "as well as",
+    "along with",
+    "and also",
+    "advantages and disadvantages",
+    "pros and cons",
+    "merits and demerits",
+    "causes and consequences",
 )
 
 
@@ -134,9 +143,7 @@ def format_worklog(steps, results) -> str:
     for idx, step in enumerate(steps or [], start=1):
         step_text = str(step)
         answer = by_step.get(step_text, "").strip()
-        blocks.append(
-            f"Step {idx}: {step_text}\n{answer or '(no result)'}"
-        )
+        blocks.append(f"Step {idx}: {step_text}\n{answer or '(no result)'}")
     return "\n\n".join(blocks)
 
 
@@ -162,9 +169,7 @@ def make_plan(question, *, max_steps: int = DEFAULT_MAX_STEPS, tier: str = "stro
         return []
     try:
         planner = _structured_llm(Plan, tier)
-        plan = planner.invoke(
-            [("system", _PLAN_SYS.format(max_steps=max_steps)), ("human", q)]
-        )
+        plan = planner.invoke([("system", _PLAN_SYS.format(max_steps=max_steps)), ("human", q)])
         steps = clamp_steps(getattr(plan, "steps", None) or [], max_steps)
         return steps or [q]
     except Exception as exc:  # pragma: no cover - defensive
@@ -190,12 +195,12 @@ def build_plan_execute_graph(
     each sub-step gets the same web/KB grounding the mentor has. ``extra_context``
     is forwarded to it (e.g. the student-profile block).
     """
-    from langgraph.graph import StateGraph, START, END
     from langchain_core.messages import AIMessage
+    from langgraph.graph import END, START, StateGraph
 
+    from src.core.llm import get_llm_for_tier
     from src.graph.state import AgentState
     from src.graph.tools import DEFAULT_TOOL_SYSTEM, build_tool_agent
-    from src.core.llm import get_llm_for_tier
 
     if max_steps is None:
         try:
@@ -211,9 +216,7 @@ def build_plan_execute_graph(
     executor = build_tool_agent(system_prompt=sys_prompt, extra_context=extra_context)
 
     def plan_node(state):
-        steps = make_plan(
-            state.get("question", ""), max_steps=max_steps, tier=planner_tier
-        )
+        steps = make_plan(state.get("question", ""), max_steps=max_steps, tier=planner_tier)
         return {"plan_steps": steps}
 
     # #5 Parallel execution. Sub-steps are independent (each runs on a fresh
@@ -252,9 +255,7 @@ def build_plan_execute_graph(
                     results = list(pool.map(_run_step, steps))
                 return {"step_results": results}
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning(
-                    "plan-execute: parallel run failed (%s); retrying sequentially", exc
-                )
+                logger.warning("plan-execute: parallel run failed (%s); retrying sequentially", exc)
         results = [_run_step(step) for step in steps]
         return {"step_results": results}
 

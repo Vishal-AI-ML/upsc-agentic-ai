@@ -7,6 +7,8 @@ import { VerifyEmail } from "./pages/VerifyEmail"
 import { ForgotPassword } from "./pages/ForgotPassword"
 import { ResetPassword } from "./pages/ResetPassword"
 import { Spinner } from "./components/ui"
+import { OfflineBanner } from "./components/OfflineBanner"
+import { NotFound } from "./pages/NotFound"
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -27,33 +29,36 @@ export default function App() {
   const resetToken = params.get("reset_token")
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          verifyToken ? (
-            <VerifyEmail />
-          ) : resetToken ? (
-            <ResetPassword />
-          ) : user ? (
-            <Navigate to="/app" replace />
-          ) : (
-            <Landing />
-          )
-        }
-      />
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/app" replace /> : <Login />}
-      />
-      <Route path="/verify-email" element={<VerifyEmail />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route
-        path="/app/*"
-        element={user ? <AppLayout /> : <Navigate to="/login" replace />}
-      />
-      <Route path="*" element={<Navigate to={user ? "/app" : "/"} replace />} />
-    </Routes>
+    <>
+      <OfflineBanner />
+      <Routes>
+        <Route
+          path="/"
+          element={
+            verifyToken ? (
+              <VerifyEmail />
+            ) : resetToken ? (
+              <ResetPassword />
+            ) : user ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <Landing />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/app" replace /> : <Login />}
+        />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/app/*"
+          element={user ? <AppLayout /> : <Navigate to="/login" replace />}
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   )
 }

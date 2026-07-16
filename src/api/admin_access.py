@@ -9,6 +9,7 @@ Monitoring, and Experiments dashboards.
 - `require_admin` -> FastAPI dependency that raises 403 for non-admins, used to
   guard the actual `/overview` data endpoints.
 """
+
 from fastapi import Depends, HTTPException, status
 
 from src.api.deps import get_current_user
@@ -20,9 +21,7 @@ def is_admin(email: str) -> bool:
     if not email:
         return False
     allow = [
-        e.strip().lower()
-        for e in (settings.admin_emails or [])
-        if isinstance(e, str) and e.strip()
+        e.strip().lower() for e in (settings.admin_emails or []) if isinstance(e, str) and e.strip()
     ]
     return email.strip().lower() in allow
 

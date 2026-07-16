@@ -4,8 +4,9 @@ We never send a real email; instead we monkeypatch send_verification_email to
 capture the link, then pull the raw token out of it - exercising the real
 token create/consume logic end to end.
 """
+
 import uuid
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 API = "/api/v1/auth"
 
@@ -18,6 +19,7 @@ def _register_capturing_token(client, monkeypatch, email, password="secret123"):
     """Register a user and return the raw verification token from the (mocked) email."""
     captured = {}
     import src.api.routes.auth as auth_mod
+
     monkeypatch.setattr(
         auth_mod,
         "send_verification_email",
@@ -78,6 +80,7 @@ def test_duplicate_register_is_400(client, monkeypatch):
     email = _unique_email()
     _register_capturing_token(client, monkeypatch, email)
     import src.api.routes.auth as auth_mod
+
     monkeypatch.setattr(auth_mod, "send_verification_email", lambda *a, **k: None)
     dup = client.post(f"{API}/register", json={"email": email, "password": "secret123"})
     assert dup.status_code == 400

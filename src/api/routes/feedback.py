@@ -4,19 +4,20 @@ Users only click a rating; the data is stored silently for the developer/admin
 to review later (which answers were helpful vs not). Nothing is shown back to
 other users.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from src.core.db import get_db
 from src.api.deps import get_current_user
+from src.core.db import get_db
 from src.core.models import Feedback
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
 
 class FeedbackRequest(BaseModel):
-    rating: str                 # "up" or "down"
+    rating: str  # "up" or "down"
     agent: str = "mentor"
     question: str = ""
     answer: str = ""

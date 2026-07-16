@@ -1,7 +1,9 @@
 """Core configuration - Pydantic Settings"""
+
 import logging
 from functools import lru_cache
 from typing import Annotated
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -112,9 +114,6 @@ class Settings(BaseSettings):
     # Database (multi-user + history). Postgres in prod, SQLite local fallback.
     # e.g. DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
     database_url: str = ""
-    # When False (production default), Alembic is the single source of truth for
-    # the schema; init_db() skips create_all. Auto-enabled for local SQLite dev.
-    db_auto_create: bool = False
 
     # Tavily Search
     tavily_api_key: str = ""
@@ -126,16 +125,25 @@ class Settings(BaseSettings):
     # to blunt credential-stuffing & user-enumeration. Keyed per-IP, own window.
     auth_rate_limit_requests: int = 10
     auth_rate_limit_period: int = 300  # 5 minutes
+    # Rate-limit backend: distributed (Upstash Redis) when creds present + this
+    # is on, else in-process per-worker. Redis is required to be correct across >1 worker.
+    rate_limit_redis_enabled: bool = True
+    # Circuit breaker for the shared Upstash REST client (cache + rate limiter):
+    # after this many consecutive failures, fail fast for reset_seconds so a
+    # Redis outage never adds an HTTP timeout to the hot path.
+    circuit_breaker_fail_max: int = 5
+    circuit_breaker_reset_seconds: float = 30.0
+    redis_rest_timeout_seconds: float = 2.0
 
     # CORS - sirf apne asli frontend origins (NOT "*" with credentials).
     # .env mein override kar sakte ho, e.g.:
     #   CORS_ORIGINS=["http://localhost:8501","https://myapp.com"]
     cors_origins: Annotated[list[str], NoDecode] = [
-        "http://localhost:8501",   # Streamlit default
+        "http://localhost:8501",  # Streamlit default
         "http://127.0.0.1:8501",
-        "http://localhost:3000",   # React/Next dev (agar use karo)
+        "http://localhost:3000",  # React/Next dev (agar use karo)
         "http://127.0.0.1:3000",
-        "http://localhost:5173",   # Vite dev server (React frontend)
+        "http://localhost:5173",  # Vite dev server (React frontend)
         "http://127.0.0.1:5173",
         "http://localhost:8080",
     ]
@@ -148,11 +156,13 @@ class Settings(BaseSettings):
 
     # Logging - DEBUG/INFO/WARNING/ERROR; empty => auto from debug flag
     log_level: str = ""
+    # Log output format: "json" | "text"; empty => json in prod, text in debug
+    log_format: str = ""
 
     # Auth / JWT
-    jwt_secret: str = ""                      # .env se aayega
+    jwt_secret: str = ""  # .env se aayega
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30     # 30 min (rotating refresh token keeps sessions alive)
+    access_token_expire_minutes: int = 30  # 30 min (rotating refresh token keeps sessions alive)
     # Refresh token validity (minutes) - default 30 days. Access tokens can
     # stay short-lived because a long-lived, ROTATING & REVOCABLE refresh
     # token (see /auth/refresh + /auth/logout) keeps sessions alive. Lower
@@ -167,7 +177,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = ""                        # blank => uses smtp_user
+    smtp_from: str = ""  # blank => uses smtp_user
     smtp_use_tls: bool = True
     # Frontend base URL used to build the reset link (no trailing slash)
     frontend_url: str = "http://localhost:8501"
@@ -185,13 +195,13 @@ class Settings(BaseSettings):
     upstash_redis_rest_url: str = ""
     upstash_redis_rest_token: str = ""
     response_cache_enabled: bool = True
-    response_cache_ttl_seconds: int = 86400   # 24h
-    response_cache_scope: str = "thread"       # thread | user | global
+    response_cache_ttl_seconds: int = 86400  # 24h
+    response_cache_scope: str = "thread"  # thread | user | global
     # Semantic (embedding-similarity) cache: paraphrased questions reuse an
     # existing answer. Opt-in; exact-match behaviour is unchanged when off.
     response_cache_semantic: bool = True
     response_cache_semantic_threshold: float = 0.92  # cosine >= this => hit
-    response_cache_semantic_max_index: int = 200     # per-scope index cap
+    response_cache_semantic_max_index: int = 200  # per-scope index cap
 
     # Admin allowlist (JSON list of emails, same convention as CORS_ORIGINS).
     # These users - and only these - see the cost dashboard tab and can call
@@ -207,36 +217,35 @@ class Settings(BaseSettings):
     price_strong_input_inr: float = 0.025
     price_strong_output_inr: float = 0.100
 
-
     # Background job queue (#10). Heavy work (PDF/lecture processing, notes,
     # vector indexing) runs OFF the request path. The default 'thread' backend
     # needs NO extra infra and works on the free tier at Rs.0. Set REDIS_URL (a
     # TCP rediss:// url) + run a worker (src/worker.py) to switch to 'rq'.
-    jobs_backend: str = "auto"          # auto | thread | rq | inline
-    redis_url: str = ""                 # TCP Redis url for rq (rediss://...)
+    jobs_backend: str = "auto"  # auto | thread | rq | inline
+    redis_url: str = ""  # TCP Redis url for rq (rediss://...)
     rq_queue_name: str = "upsc-jobs"
-    job_max_retries: int = 1            # bounded retries on transient failure
-    job_timeout_seconds: int = 900      # per-job hard cap (rq worker)
+    job_max_retries: int = 1  # bounded retries on transient failure
+    job_timeout_seconds: int = 900  # per-job hard cap (rq worker)
 
     # --- A/B prompt experiments (#12) ---
-    experiments_enabled: bool = True    # master switch; control arm keeps todays prompt
-    experiments_config: str = ""        # optional JSON overriding the built-in experiments
+    experiments_enabled: bool = True  # master switch; control arm keeps todays prompt
+    experiments_config: str = ""  # optional JSON overriding the built-in experiments
 
     # Reflection / self-critique (#7). After generation, a critic scores the
     # answer and (when weak) a bounded revise pass rewrites it. Fail-open: any
     # critic error keeps the original answer. reflection_enabled=false restores
     # the previous single-pass behaviour.
     reflection_enabled: bool = False
-    reflection_min_score: int = 7          # 1-10; below this triggers a revise
-    reflection_max_revisions: int = 1      # bounded loop (cost + latency guard)
+    reflection_min_score: int = 7  # 1-10; below this triggers a revise
+    reflection_max_revisions: int = 1  # bounded loop (cost + latency guard)
 
     # Plan-and-execute (#7). For genuinely complex, multi-part questions the
     # mentor path can decompose -> execute each sub-step -> synthesize. OFF by
     # default because it issues several extra LLM calls (latency + free-tier
     # quota). Enable with PLAN_EXECUTE_ENABLED=true.
     plan_execute_enabled: bool = False
-    plan_execute_min_words: int = 30       # complexity gate (aligns w/ model_router)
-    plan_execute_max_steps: int = 5        # cap sub-steps (cost guard)
+    plan_execute_min_words: int = 30  # complexity gate (aligns w/ model_router)
+    plan_execute_max_steps: int = 5  # cap sub-steps (cost guard)
     # #5 Parallel execution. Independent sub-steps run concurrently (bounded)
     # instead of one-by-one. FAIL-OPEN -> sequential on any error. OFF by
     # default so behaviour is unchanged until opted in.
@@ -254,9 +263,9 @@ class Settings(BaseSettings):
     #   provider=local  -> sentence-transformers CrossEncoder (uv add sentence-transformers)
     #   provider=cohere -> Cohere Rerank API (uv add cohere + COHERE_API_KEY)
     rerank_enabled: bool = False
-    rerank_provider: str = "local"                 # local | cohere
+    rerank_provider: str = "local"  # local | cohere
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    rerank_top_n: int = 5                          # keep top-N after reranking
+    rerank_top_n: int = 5  # keep top-N after reranking
     cohere_api_key: str = ""
     cohere_rerank_model: str = "rerank-english-v3.0"
 
@@ -264,7 +273,7 @@ class Settings(BaseSettings):
     # N variants; each is retrieved and the candidate pools are merged before
     # RRF. Deepens recall for short/abbreviated queries (FR, DPSP, CAG...).
     multi_query_enabled: bool = False
-    multi_query_count: int = 3                     # total queries incl. original
+    multi_query_count: int = 3  # total queries incl. original
 
     # #3 HyDE (Hypothetical Document Embeddings). An LLM drafts a hypothetical
     # answer that is embedded for the dense arm (answer-style text matches
@@ -287,7 +296,7 @@ class Settings(BaseSettings):
     #   Free project + DSN: https://sentry.io  (create a Python -> FastAPI project)
     sentry_dsn: str = ""
     sentry_environment: str = "production"
-    sentry_traces_sample_rate: float = 0.0   # perf tracing off by default (cost)
+    sentry_traces_sample_rate: float = 0.0  # perf tracing off by default (cost)
     sentry_profiles_sample_rate: float = 0.0
 
     @field_validator("cors_origins", "admin_emails", mode="before")
@@ -306,14 +315,15 @@ class Settings(BaseSettings):
                 return []
             if s.startswith("["):
                 import json
+
                 try:
                     return json.loads(s)
                 except Exception:
                     s = s.strip("[]")
             return [
-                item.strip().strip('\"').strip("'")
+                item.strip().strip('"').strip("'")
                 for item in s.split(",")
-                if item.strip().strip('\"').strip("'")
+                if item.strip().strip('"').strip("'")
             ]
         return v
 
@@ -339,27 +349,48 @@ class Settings(BaseSettings):
         Qdrant) receive valid values. Also upgrade the legacy ``postgres://``
         scheme that SQLAlchemy 2.0 no longer accepts.
         """
+
         def _clean(value):
             if isinstance(value, str):
                 return value.strip().strip('"').strip("'").strip()
             return value
 
         for field_name in (
-            "database_url", "qdrant_url", "qdrant_api_key",
-            "google_api_key", "groq_api_key", "tavily_api_key",
-            "jwt_secret", "langfuse_public_key", "langfuse_secret_key",
-            "langfuse_host", "embedding_model", "embedding_provider",
-            "local_embedding_model", "groq_fallback_models",
-            "fastembed_cache_dir", "ollama_base_url",
-            "ollama_embedding_model", "openai_compat_base_url",
-            "openai_compat_api_key", "openai_compat_models",
-            "openai_embed_base_url", "openai_embed_api_key",
+            "database_url",
+            "qdrant_url",
+            "qdrant_api_key",
+            "google_api_key",
+            "groq_api_key",
+            "tavily_api_key",
+            "jwt_secret",
+            "langfuse_public_key",
+            "langfuse_secret_key",
+            "langfuse_host",
+            "embedding_model",
+            "embedding_provider",
+            "local_embedding_model",
+            "groq_fallback_models",
+            "fastembed_cache_dir",
+            "ollama_base_url",
+            "ollama_embedding_model",
+            "openai_compat_base_url",
+            "openai_compat_api_key",
+            "openai_compat_models",
+            "openai_embed_base_url",
+            "openai_embed_api_key",
             "openai_embed_model",
-            "upstash_redis_rest_url", "upstash_redis_rest_token",
-            "redis_url", "rq_queue_name", "experiments_config",
-            "sentry_dsn", "sentry_environment",
-            "env", "rerank_provider", "rerank_model",
-            "cohere_api_key", "cohere_rerank_model",
+            "upstash_redis_rest_url",
+            "upstash_redis_rest_token",
+            "redis_url",
+            "rq_queue_name",
+            "experiments_config",
+            "sentry_dsn",
+            "sentry_environment",
+            "env",
+            "rerank_provider",
+            "rerank_model",
+            "cohere_api_key",
+            "cohere_rerank_model",
         ):
             setattr(self, field_name, _clean(getattr(self, field_name)))
 
@@ -378,9 +409,7 @@ class Settings(BaseSettings):
 
         # Fail fast on a forgeable JWT secret in production; ephemeral in dev.
         # is_production prefers explicit ENV over the debug flag.
-        self.jwt_secret = resolve_jwt_secret(
-            self.jwt_secret, is_production=self.is_production
-        )
+        self.jwt_secret = resolve_jwt_secret(self.jwt_secret, is_production=self.is_production)
 
         return self
 

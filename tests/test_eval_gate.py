@@ -5,6 +5,7 @@ gate logic lives in ``src.eval.gates`` (stdlib only, no langchain/langgraph),
 and the dataset check only reads JSON. The full LLM-as-judge run
 (``python -m src.eval.llm_eval``) is a separate, secret-gated CI job.
 """
+
 import json
 from pathlib import Path
 
@@ -56,7 +57,9 @@ def test_empty_scores_are_zero_not_crash():
 
 
 def test_unsupported_claim_rate_counts_cases_not_claims():
-    s = summarize_scores([1.0, 1.0, 1.0], [1.0], [1.0], gate=0.9, unsupported_claim_counts=[0, 2, 1])
+    s = summarize_scores(
+        [1.0, 1.0, 1.0], [1.0], [1.0], gate=0.9, unsupported_claim_counts=[0, 2, 1]
+    )
     assert s["unsupported_claim_rate"] == 0.667
     assert s["total_cases"] == 3
 
@@ -91,9 +94,12 @@ def test_strict_gate_high_relevancy_cannot_rescue_low_faithfulness():
 def test_strict_gate_respects_custom_thresholds():
     summary = {"faithfulness": 0.8, "answer_relevancy": 0.8, "context_precision": 0.8}
     # Lower every threshold -> passes.
-    assert evaluate_strict_gate(
-        summary, faithfulness_gate=0.7, relevancy_gate=0.7, precision_gate=0.7
-    )["passed"] is True
+    assert (
+        evaluate_strict_gate(
+            summary, faithfulness_gate=0.7, relevancy_gate=0.7, precision_gate=0.7
+        )["passed"]
+        is True
+    )
     # Raise faithfulness threshold -> fails on faithfulness only.
     res = evaluate_strict_gate(summary, faithfulness_gate=0.9)
     assert res["passed"] is False
@@ -131,9 +137,7 @@ def test_per_agent_flags_the_specific_failing_agent():
 
 def test_per_agent_strict_mode_gates_all_metrics():
     rows = [_row("ncert", 0.95, rel=0.3, prec=0.9)]
-    out = summarize_by_agent(
-        rows, faithfulness_gate=0.9, relevancy_gate=0.7, precision_gate=0.6
-    )
+    out = summarize_by_agent(rows, faithfulness_gate=0.9, relevancy_gate=0.7, precision_gate=0.6)
     assert out["ncert"]["passed"] is False
     assert out["ncert"]["failures"][0]["metric"] == "answer_relevancy"
 
@@ -170,14 +174,16 @@ def test_markdown_report_writer_with_per_agent_and_strict(tmp_path):
     )
     write_markdown_report(
         summary,
-        [{
-            "question": "What is science?",
-            "agent": "ncert",
-            "faithfulness": 0.9,
-            "answer_relevancy": 0.8,
-            "context_precision": 0.7,
-            "unsupported_claims": 0,
-        }],
+        [
+            {
+                "question": "What is science?",
+                "agent": "ncert",
+                "faithfulness": 0.9,
+                "answer_relevancy": 0.8,
+                "context_precision": 0.7,
+                "unsupported_claims": 0,
+            }
+        ],
         path,
         per_agent=per_agent,
         strict_gate=strict,

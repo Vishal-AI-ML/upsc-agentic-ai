@@ -17,6 +17,7 @@ Production note: the connections use ``autocommit=True`` and
 Supabase / pgBouncer (which do not support server-side prepared statements).
 Call ``close_memory()`` on application shutdown to release the pools cleanly.
 """
+
 from __future__ import annotations
 
 import logging
@@ -100,6 +101,7 @@ def get_checkpointer():
 
     try:
         import sqlite3
+
         from langgraph.checkpoint.sqlite import SqliteSaver
 
         conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
@@ -147,9 +149,7 @@ def get_store():
         _store = InMemoryStore()
         return _store
     except Exception as exc:  # pragma: no cover - depends on env
-        logger.warning(
-            "In-memory store unavailable (%s); running without long-term store", exc
-        )
+        logger.warning("In-memory store unavailable (%s); running without long-term store", exc)
         _store = None
         return _store
 

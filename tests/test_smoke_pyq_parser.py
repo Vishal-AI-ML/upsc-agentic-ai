@@ -5,6 +5,7 @@ parser. We test BOTH branches without any network:
   1. LLM unavailable  -> regex fallback still returns structured questions.
   2. LLM returns JSON -> JSON path is parsed and normalised.
 """
+
 from langchain_core.runnables import RunnableLambda
 
 
@@ -56,4 +57,5 @@ def test_llm_json_path(monkeypatch):
 
 def test_empty_text_returns_empty():
     import src.agents.pyq.graph as g
+
     assert g.parse_questions("   ") == []

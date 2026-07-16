@@ -33,6 +33,7 @@ Scope options (``RESPONSE_CACHE_SCOPE``):
     "global"           - key per question; max hit-rate, use only for a purely
                          static-knowledge deployment (no personalisation)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -41,6 +42,8 @@ import logging
 import math
 import re
 from typing import Any, Callable, List, Optional
+
+from src.core.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,33 @@ def _cosine(a: List[float], b: List[float]) -> float:
     if na == 0.0 or nb == 0.0:
         return 0.0
     return dot / (na * nb)
+
+
+def _record_cache(kind: str) -> None:
+    """Fail-open bridge to the Cost dashboard usage tracker."""
+    try:
+        from src.core.usage_tracker import record_cache
+
+        record_cache(kind)
+    except Exception:
+        pass
+
+
+_redis_breaker: Optional[CircuitBreaker] = None
+
+
+def _get_redis_breaker() -> CircuitBreaker:
+    """Lazily build the shared cache-Redis circuit breaker from settings."""
+    global _redis_breaker
+    if _redis_breaker is None:
+        from src.core.config import settings
+
+        _redis_breaker = CircuitBreaker(
+            fail_max=settings.circuit_breaker_fail_max,
+            reset_timeout=settings.circuit_breaker_reset_seconds,
+            name="cache-redis",
+        )
+    return _redis_breaker
 
 
 class ResponseCache:
@@ -146,13 +176,18 @@ class ResponseCache:
         Tries an exact-match lookup first, then (if enabled) a semantic one.
         """
         if not self.enabled:
+            _record_cache("skip")
             return None
         key = _cache_key(self.scope, user_id, thread_id, question)
         hit = self._get_raw(key)
         if hit is not None:
+            _record_cache("hit_exact")
             return hit
         if self.semantic:
-            return self._semantic_get(user_id, thread_id, question)
+            result = self._semantic_get(user_id, thread_id, question)
+            _record_cache("hit_semantic" if result is not None else "miss")
+            return result
+        _record_cache("miss")
         return None
 
     def _get_raw(self, key: str) -> Optional[dict]:
@@ -172,9 +207,7 @@ class ResponseCache:
             return data
         return None
 
-    def _semantic_get(
-        self, user_id: str, thread_id: str, question: str
-    ) -> Optional[dict]:
+    def _semantic_get(self, user_id: str, thread_id: str, question: str) -> Optional[dict]:
         """Embedding-similarity fallback: reuse the nearest stored answer."""
         try:
             q_emb = self._embed(_normalize(question))
@@ -225,9 +258,7 @@ class ResponseCache:
         if self.semantic:
             self._semantic_index(user_id, thread_id, question, key)
 
-    def _semantic_index(
-        self, user_id: str, thread_id: str, question: str, key: str
-    ) -> None:
+    def _semantic_index(self, user_id: str, thread_id: str, question: str, key: str) -> None:
         """Best-effort: append this question's embedding to the scope index."""
         try:
             emb = self._embed(_normalize(question))
@@ -237,9 +268,7 @@ class ResponseCache:
             entry = json.dumps({"key": key, "emb": [round(float(x), 6) for x in emb]})
             self._redis_command(["LPUSH", idx_key, entry])
             # Cap the index so it stays small and cheap to scan.
-            self._redis_command(
-                ["LTRIM", idx_key, "0", str(self.semantic_max_index - 1)]
-            )
+            self._redis_command(["LTRIM", idx_key, "0", str(self.semantic_max_index - 1)])
         except Exception:  # fail-open: indexing never breaks a request
             logger.debug("response cache semantic index failed", exc_info=True)
 
@@ -253,14 +282,23 @@ class ResponseCache:
         """
         import httpx
 
-        resp = httpx.post(
-            self.rest_url,
-            json=command,
-            headers={"Authorization": f"Bearer {self.rest_token}"},
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-        return resp.json().get("result")
+        breaker = _get_redis_breaker()
+        if not breaker.allow():
+            raise RuntimeError("Upstash breaker OPEN (cache)")
+        try:
+            resp = httpx.post(
+                self.rest_url,
+                json=command,
+                headers={"Authorization": f"Bearer {self.rest_token}"},
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            result = resp.json().get("result")
+        except Exception:
+            breaker.record_failure()
+            raise
+        breaker.record_success()
+        return result
 
 
 _cache_singleton: Optional[ResponseCache] = None
@@ -294,5 +332,6 @@ def get_response_cache() -> ResponseCache:
 
 def reset_response_cache() -> None:
     """Drop the singleton so the next call rebuilds it from settings."""
-    global _cache_singleton
+    global _cache_singleton, _redis_breaker
     _cache_singleton = None
+    _redis_breaker = None

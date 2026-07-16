@@ -3,6 +3,7 @@
 Pure helpers only: complexity gate, plan cleaning, and worklog formatting. No
 LLM/network involved.
 """
+
 from __future__ import annotations
 
 from src.graph.plan_execute import (

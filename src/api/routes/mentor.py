@@ -11,6 +11,7 @@ The graph is compiled once and reused; it is stateless (no checkpointer), so
 conversation context is supplied per request by mapping ``chat_history`` onto
 the agent's message list.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,8 +20,8 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.schemas import MentorRequest, MentorResponse
 from src.graph.mentor_graph import build_mentor_graph
+from src.schemas import MentorRequest, MentorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +87,7 @@ def _build_state(request: MentorRequest) -> dict:
             request.student_context.model_dump() if request.student_context else None
         ),
         "messages": _history_to_messages(
-            [m.model_dump() for m in request.chat_history]
-            if request.chat_history
-            else None
+            [m.model_dump() for m in request.chat_history] if request.chat_history else None
         ),
     }
 

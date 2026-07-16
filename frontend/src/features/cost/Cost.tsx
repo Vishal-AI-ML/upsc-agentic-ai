@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts"
 import { api, type CostOverview } from "../../lib/api"
-import { Card, Spinner } from "../../components/ui"
+import { Card, Spinner, ErrorState } from "../../components/ui"
 
 const BRAND_COLOR = "#7c3aed"
 const LITE_COLOR = "#22d3ee"
@@ -64,7 +64,14 @@ function AgentSpendChart({ data }: { data: CostOverview["agents"] }) {
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={points} margin={barMargin}>
         <CartesianGrid stroke="#232a3d" vertical={false} />
-        <XAxis dataKey="label" tick={axisTick} interval={0} angle={-15} height={48} textAnchor="end" />
+        <XAxis
+          dataKey="label"
+          tick={axisTick}
+          interval={0}
+          angle={-15}
+          height={48}
+          textAnchor="end"
+        />
         <YAxis tick={axisTick} />
         <Tooltip
           contentStyle={tooltipStyle}
@@ -108,7 +115,7 @@ function TierMixBar({ mix }: { mix: CostOverview["tier_mix"] }) {
 }
 
 export function Cost() {
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["cost-overview"],
     queryFn: () => api.cost(),
     retry: false,
@@ -123,11 +130,15 @@ export function Cost() {
   }
 
   if (isError) {
-    const msg = (error as { status?: number })?.status === 403
+    const forbidden = (error as { status?: number })?.status === 403
+    const msg = forbidden
       ? "You do not have access to the cost dashboard."
       : "Could not load cost data. Please try again."
     return (
-      <Card className="text-center text-muted">{msg}</Card>
+      <ErrorState
+        message={msg}
+        onRetry={forbidden ? undefined : () => void refetch()}
+      />
     )
   }
 
@@ -145,8 +156,8 @@ export function Cost() {
 
       {!hasTraffic && (
         <Card className="text-center text-muted">
-          No traffic recorded yet. Ask the mentor a few questions, then refresh
-          to see estimated spend by agent.
+          No traffic recorded yet. Ask the mentor a few questions, then refresh to see
+          estimated spend by model.
         </Card>
       )}
 
@@ -159,7 +170,13 @@ export function Cost() {
         <StatCard
           label="Cache hit rate"
           value={pct(d.cache.hit_rate)}
-          hint={d.cache.hit_exact + d.cache.hit_semantic + " hits · " + d.cache.miss + " misses"}
+          hint={
+            d.cache.hit_exact +
+            d.cache.hit_semantic +
+            " hits · " +
+            d.cache.miss +
+            " misses"
+          }
         />
         <StatCard
           label="LITE share"
@@ -175,7 +192,7 @@ export function Cost() {
 
       <Card className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-fg">Estimated spend by agent</h2>
+          <h2 className="font-bold text-fg">Estimated spend by model</h2>
           <span className="text-xs text-muted">
             avg {rupees(d.totals.avg_cost_per_call_inr)}/call
           </span>
@@ -183,7 +200,7 @@ export function Cost() {
         {d.agents.length ? (
           <AgentSpendChart data={d.agents} />
         ) : (
-          <p className="py-8 text-center text-sm text-muted">No agent activity yet.</p>
+          <p className="py-8 text-center text-sm text-muted">No model activity yet.</p>
         )}
       </Card>
 
@@ -191,8 +208,8 @@ export function Cost() {
         <Card className="flex flex-col gap-3">
           <h2 className="font-bold text-fg">Model tier mix</h2>
           <p className="text-xs text-muted">
-            Cheaper LITE-tier traffic lowers the blended rate. Routing (item #8)
-            biases here.
+            Cheaper LITE-tier traffic lowers the blended rate. Routing (item #8) biases
+            here.
           </p>
           <TierMixBar mix={d.tier_mix} />
         </Card>
@@ -221,8 +238,8 @@ export function Cost() {
       </div>
 
       <p className="text-center text-xs text-muted">
-        Figures are estimates (heuristic token counts × list-price rates) for a
-        spend gauge, not billing. Counters reset when the backend restarts.
+        Figures are estimates (heuristic token counts × list-price rates) for a spend
+        gauge, not billing. Counters reset when the backend restarts.
       </p>
     </div>
   )

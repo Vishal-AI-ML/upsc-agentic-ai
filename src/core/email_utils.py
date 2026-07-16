@@ -3,6 +3,7 @@
 If SMTP settings are not configured, the reset link is logged to the server
 console instead of being emailed (useful for local development / testing).
 """
+
 import logging
 import smtplib
 from email.message import EmailMessage

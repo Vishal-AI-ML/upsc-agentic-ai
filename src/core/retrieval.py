@@ -29,6 +29,7 @@ The public surface (``rerank_scored_documents`` return keys, ``hybrid_score``,
 ``lexical_overlap_score``) is kept backward compatible so ``vector_store`` and
 the Step 5 retrieval-eval harness need no changes.
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,8 +42,32 @@ logger = logging.getLogger(__name__)
 _CROSS_ENCODER_CACHE: dict[str, Any] = {}
 
 _STOPWORDS = {
-    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "are", "was", "were",
-    "what", "why", "how", "does", "do", "did", "according", "chapter", "explain", "main", "idea",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "was",
+    "were",
+    "what",
+    "why",
+    "how",
+    "does",
+    "do",
+    "did",
+    "according",
+    "chapter",
+    "explain",
+    "main",
+    "idea",
 }
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+-]{2,}")
 
@@ -88,7 +113,9 @@ def lexical_overlap_score(query: str, document: str) -> float:
     return round(len(terms & doc_terms) / len(terms), 3)
 
 
-def hybrid_score(vector_score: float | None, lexical_score: float, *, vector_weight: float = 0.75) -> float:
+def hybrid_score(
+    vector_score: float | None, lexical_score: float, *, vector_weight: float = 0.75
+) -> float:
     """Legacy linear blend of vector relevance and lexical overlap.
 
     Retained for backward compatibility only; ranking now uses RRF via
@@ -166,7 +193,9 @@ def concept_coverage_score(query: str, document: str) -> float:
 # --------------------------------------------------------------------------- #
 # Reciprocal Rank Fusion
 # --------------------------------------------------------------------------- #
-def reciprocal_rank_fusion(rankings: list[list[int]], *, k: int = DEFAULT_RRF_K) -> dict[int, float]:
+def reciprocal_rank_fusion(
+    rankings: list[list[int]], *, k: int = DEFAULT_RRF_K
+) -> dict[int, float]:
     """Fuse several ranked lists of item ids via Reciprocal Rank Fusion.
 
     Each ranking is a list of item ids ordered best-first. Returns a map
@@ -195,11 +224,13 @@ def rerank_scored_documents(
     rows: list[dict[str, Any]] = []
     for doc, score in scored_docs:
         excerpt = getattr(doc, "page_content", "") or ""
-        rows.append({
-            "doc": doc,
-            "score": round(score, 3) if score is not None else None,
-            "lexical_score": concept_coverage_score(query, excerpt),
-        })
+        rows.append(
+            {
+                "doc": doc,
+                "score": round(score, 3) if score is not None else None,
+                "lexical_score": concept_coverage_score(query, excerpt),
+            }
+        )
     if not rows:
         return rows
 
@@ -257,9 +288,7 @@ def _local_cross_scores(query: str, texts: list[str], model_name: str) -> list[f
     return [float(s) for s in ce.predict(pairs)]
 
 
-def _cohere_cross_scores(
-    query: str, texts: list[str], model: str, api_key: str
-) -> list[float]:
+def _cohere_cross_scores(query: str, texts: list[str], model: str, api_key: str) -> list[float]:
     import cohere  # lazy, optional dep
 
     client = cohere.Client(api_key)

@@ -3,6 +3,7 @@
 Uses the `bcrypt` library directly (no passlib) to avoid the passlib + bcrypt
 4.x version-reading bug on Windows.
 """
+
 import logging
 
 import bcrypt

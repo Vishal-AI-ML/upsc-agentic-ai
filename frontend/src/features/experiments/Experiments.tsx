@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { api, type ExperimentsOverview } from "../../lib/api"
-import { Card, Spinner } from "../../components/ui"
+import { Card, Spinner, ErrorState } from "../../components/ui"
 
 // --- tiny formatters ------------------------------------------------------- //
 const pct = (x: number | null | undefined) =>
@@ -92,7 +92,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function Experiments() {
-  const { data, isLoading, error } = useQuery<ExperimentsOverview>({
+  const { data, isLoading, error, refetch } = useQuery<ExperimentsOverview>({
     queryKey: ["experiments"],
     queryFn: () => api.experiments(),
     retry: false,
@@ -101,9 +101,10 @@ export default function Experiments() {
   if (isLoading) return <Spinner />
   if (error || !data)
     return (
-      <Card>
-        <p>Could not load experiments. This view is admin-only.</p>
-      </Card>
+      <ErrorState
+        message="Could not load experiments. This view is admin-only."
+        onRetry={() => void refetch()}
+      />
     )
 
   const overall = data.feedback.overall
@@ -117,8 +118,8 @@ export default function Experiments() {
         </div>
         <p style={noteStyle}>
           Human thumbs up/down feed a labelled dataset and per-variant win-rates.
-          Winners are picked by a conservative lower bound, so a variant needs
-          both a good rate and enough data before it is crowned.
+          Winners are picked by a conservative lower bound, so a variant needs both a
+          good rate and enough data before it is crowned.
         </p>
         <div style={statGrid}>
           <Stat label="Overall up-rate" value={pct(overall.up_rate)} />

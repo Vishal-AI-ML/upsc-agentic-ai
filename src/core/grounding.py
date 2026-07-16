@@ -18,6 +18,7 @@ Two consumers share this module:
 Everything here is pure Python (only ``re``): no network, no LLM, no heavy
 imports, so it runs in CI with no API keys.
 """
+
 from __future__ import annotations
 
 import re
@@ -163,7 +164,7 @@ def citations_from_tool_messages(messages, *, max_items: int = MAX_CITATIONS) ->
                     continue
                 stripped = line.strip()
                 if stripped.startswith("[") and "]" in stripped:
-                    src = stripped[1:stripped.index("]")].strip()
+                    src = stripped[1 : stripped.index("]")].strip()
                     if src:
                         citation = f"knowledge base \u2014 {src}"
                         if citation not in seen:
@@ -212,21 +213,78 @@ _TOKEN_RE = re.compile(r"[a-zA-Z0-9\u0900-\u097F]+")
 
 # Very common words that carry no topical signal (kept small + bilingual).
 _STOP_TOKENS = {
-    "the", "and", "for", "that", "this", "with", "from", "are", "was", "were",
-    "have", "has", "had", "into", "over", "under", "which", "while", "their",
-    "they", "them", "then", "than", "there", "these", "those", "such", "also",
-    "been", "being", "about", "would", "could", "should", "will", "shall",
-    "your", "you", "our", "can", "not", "but", "any", "all", "each", "more",
-    "most", "some", "other", "only", "very", "much", "many", "jaise", "aur",
-    "hai", "hain", "tha", "the", "kya", "kar", "karo", "liye", "mein", "apne",
+    "the",
+    "and",
+    "for",
+    "that",
+    "this",
+    "with",
+    "from",
+    "are",
+    "was",
+    "were",
+    "have",
+    "has",
+    "had",
+    "into",
+    "over",
+    "under",
+    "which",
+    "while",
+    "their",
+    "they",
+    "them",
+    "then",
+    "than",
+    "there",
+    "these",
+    "those",
+    "such",
+    "also",
+    "been",
+    "being",
+    "about",
+    "would",
+    "could",
+    "should",
+    "will",
+    "shall",
+    "your",
+    "you",
+    "our",
+    "can",
+    "not",
+    "but",
+    "any",
+    "all",
+    "each",
+    "more",
+    "most",
+    "some",
+    "other",
+    "only",
+    "very",
+    "much",
+    "many",
+    "jaise",
+    "aur",
+    "hai",
+    "hain",
+    "tha",
+    "the",
+    "kya",
+    "kar",
+    "karo",
+    "liye",
+    "mein",
+    "apne",
 }
 
 
 def _content_tokens(text: str) -> set:
     """Distinctive (>=4 char, non-stopword) lowercase tokens for overlap tests."""
     return {
-        t for t in _TOKEN_RE.findall((text or "").lower())
-        if len(t) >= 4 and t not in _STOP_TOKENS
+        t for t in _TOKEN_RE.findall((text or "").lower()) if len(t) >= 4 and t not in _STOP_TOKENS
     }
 
 
@@ -252,8 +310,8 @@ def kb_chunks_from_tool_messages(messages) -> dict:
                 continue
             stripped = line.strip()
             if stripped.startswith("[") and "]" in stripped:
-                src = stripped[1:stripped.index("]")].strip()
-                rest = stripped[stripped.index("]") + 1:]
+                src = stripped[1 : stripped.index("]")].strip()
+                rest = stripped[stripped.index("]") + 1 :]
                 current = src or None
                 if current:
                     chunks[current] = chunks.get(current, "") + " " + rest
@@ -288,7 +346,7 @@ def filter_kb_citations_by_overlap(
         if not label.startswith(_KB_CITATION_MARKER):
             kept.append(citation)  # web / other sources unaffected
             continue
-        src = label[len(_KB_CITATION_MARKER):].strip()
+        src = label[len(_KB_CITATION_MARKER) :].strip()
         chunk_tokens = _content_tokens(chunks.get(src, ""))
         if not chunk_tokens:
             continue  # cannot verify -> do not cite

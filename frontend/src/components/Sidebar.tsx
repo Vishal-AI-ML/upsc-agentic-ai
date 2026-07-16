@@ -1,9 +1,15 @@
-import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react"
+import {
+  useCallback,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react"
 import { Link, NavLink } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
 import { getApiBase, setApiBase } from "../lib/config"
+import { Modal, Button, Input } from "./ui"
 
 type Item = { to: string; icon: string; label: string }
 
@@ -97,8 +103,15 @@ export function Sidebar({
       : []),
   ]
 
-  function changeBackend() {
-    const v = window.prompt("Backend API base URL:", getApiBase())
+  const [backendOpen, setBackendOpen] = useState(false)
+  const [backendUrl, setBackendUrl] = useState("")
+
+  function openBackend() {
+    setBackendUrl(getApiBase())
+    setBackendOpen(true)
+  }
+  function saveBackend() {
+    const v = backendUrl.trim()
     if (v) {
       setApiBase(v)
       window.location.reload()
@@ -230,7 +243,7 @@ export function Sidebar({
           </div>
           {access?.admin && (
             <button
-              onClick={changeBackend}
+              onClick={openBackend}
               title={collapsed ? "Backend URL" : undefined}
               className={btnClass}
             >
@@ -274,6 +287,29 @@ export function Sidebar({
           />
         )}
       </aside>
+
+      <Modal
+        open={backendOpen}
+        title="Backend API URL"
+        onClose={() => setBackendOpen(false)}
+      >
+        <label className="mb-1 block text-sm text-muted" htmlFor="backend-url">
+          Base URL
+        </label>
+        <Input
+          id="backend-url"
+          value={backendUrl}
+          onChange={(e) => setBackendUrl(e.target.value)}
+          placeholder="https://api.example.com/api/v1"
+          autoFocus
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setBackendOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={saveBackend}>Save and reload</Button>
+        </div>
+      </Modal>
     </>
   )
 }

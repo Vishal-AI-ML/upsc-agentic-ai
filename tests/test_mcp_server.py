@@ -5,6 +5,7 @@ registry, transport resolution, the _collect flattener, and that the core
 handlers really delegate to the app's tool functions (empty-query path stays
 dependency-free).
 """
+
 import importlib
 import sys
 
@@ -36,15 +37,15 @@ def test_resolve_transport_aliases():
     assert m.resolve_transport("sse") == "sse"
     assert m.resolve_transport("streamable-http") == "sse"
     assert m.resolve_transport(None) == "stdio"
-    assert m.resolve_transport("garbage") == "stdio"      # unknown -> safe default
-    assert m.resolve_transport("  HTTP ") == "sse"         # trim + case-insensitive
+    assert m.resolve_transport("garbage") == "stdio"  # unknown -> safe default
+    assert m.resolve_transport("  HTTP ") == "sse"  # trim + case-insensitive
 
 
 def test_collect_flattens_strings_and_streams():
     m = _load()
     assert m._collect("hello") == "hello"
-    assert m._collect(["a", "b", "c"]) == "abc"           # list of str
-    assert m._collect(iter(["x", "y"])) == "xy"           # generator of str
+    assert m._collect(["a", "b", "c"]) == "abc"  # list of str
+    assert m._collect(iter(["x", "y"])) == "xy"  # generator of str
 
     class _Chunk:
         def __init__(self, content):

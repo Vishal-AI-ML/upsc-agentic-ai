@@ -3,6 +3,7 @@
 This module is deterministic and conservative: it extracts only explicit
 student-provided signals, so personalization improves without inventing facts.
 """
+
 from __future__ import annotations
 
 import re
@@ -10,9 +11,16 @@ from typing import Any
 
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
 _HOURS_RE = re.compile(r"\b(\d{1,2})\s*(?:hours?|hrs?|ghante|घंटे)\b", re.IGNORECASE)
-_ATTEMPT_RE = re.compile(r"\b(?:attempt|attempts?)\s*(?:number|no\.?|#)?\s*(\d{1,2})\b", re.IGNORECASE)
-_WEAK_RE = re.compile(r"\b(?:weak|weakness|weak in|weak area|कमजोर)\s*(?:in|area)?\s*[:\-]?\s*([A-Za-z][A-Za-z\s&/-]{2,60})", re.IGNORECASE)
-_OPTIONAL_RE = re.compile(r"\boptional\s*(?:subject)?\s*[:\-]?\s*([A-Za-z][A-Za-z\s&/-]{2,60})", re.IGNORECASE)
+_ATTEMPT_RE = re.compile(
+    r"\b(?:attempt|attempts?)\s*(?:number|no\.?|#)?\s*(\d{1,2})\b", re.IGNORECASE
+)
+_WEAK_RE = re.compile(
+    r"\b(?:weak|weakness|weak in|weak area|कमजोर)\s*(?:in|area)?\s*[:\-]?\s*([A-Za-z][A-Za-z\s&/-]{2,60})",
+    re.IGNORECASE,
+)
+_OPTIONAL_RE = re.compile(
+    r"\boptional\s*(?:subject)?\s*[:\-]?\s*([A-Za-z][A-Za-z\s&/-]{2,60})", re.IGNORECASE
+)
 _LANG_RE = re.compile(r"\b(hindi|hinglish|english)\b", re.IGNORECASE)
 
 
@@ -51,7 +59,9 @@ def extract_student_profile_signals(text: str) -> dict[str, Any]:
     return profile
 
 
-def merge_student_profile(existing: dict[str, Any] | None, updates: dict[str, Any]) -> dict[str, Any]:
+def merge_student_profile(
+    existing: dict[str, Any] | None, updates: dict[str, Any]
+) -> dict[str, Any]:
     """Merge extracted updates into an existing profile without dropping fields."""
     merged = dict(existing or {})
     for key, value in (updates or {}).items():

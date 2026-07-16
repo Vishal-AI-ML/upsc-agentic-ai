@@ -12,10 +12,11 @@ what arguments, and how many times. This module now simply wires that agent with
 the mentor system prompt plus per-request student-profile context, preserving
 the ``build_mentor_graph`` entry point that ``supervisor.py`` depends on.
 """
+
 from __future__ import annotations
 
-from src.graph.tools import DEFAULT_TOOL_SYSTEM, build_tool_agent
 from src.agents.mentor.graph import _build_student_context
+from src.graph.tools import DEFAULT_TOOL_SYSTEM, build_tool_agent
 
 
 def _mentor_context(state) -> str:

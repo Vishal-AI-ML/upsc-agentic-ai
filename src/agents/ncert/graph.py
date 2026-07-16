@@ -2,17 +2,20 @@
 NCERT Agent - PDF reading, notes generation, RAG chat
 """
 
-import os
 import logging
+import os
 from functools import lru_cache
 
 from pypdf import PdfReader
-from langchain_core.prompts import ChatPromptTemplate
 
-from src.core.llm import get_llm
-from src.core.vector_store import create_vector_store, similarity_search, make_persist_key, persist_dir_for
-from src.agents.ncert.prompts import NOTES_PROMPT, CHAT_PROMPT
+from src.agents.ncert.prompts import CHAT_PROMPT, NOTES_PROMPT
 from src.core.config import settings
+from src.core.llm import get_llm
+from src.core.vector_store import (
+    create_vector_store,
+    make_persist_key,
+    similarity_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,7 @@ def detect_subject_area(subject: str, class_name: str = "") -> tuple[str, str]:
 # DROPDOWN HELPERS
 # ─────────────────────────────────────────
 
+
 @lru_cache(maxsize=1)
 def get_classes() -> list[str]:
     """Get available NCERT classes."""
@@ -87,25 +91,26 @@ def get_chapters(class_name: str, subject: str) -> list[str]:
 # PDF READING
 # ─────────────────────────────────────────
 
+
 def read_chapter_pdf(class_name: str, subject: str, chapter: str) -> tuple[str, str]:
     """Read chapter PDF and return text + path."""
     path = f"{BASE}/{class_name}/{subject}/{chapter}"
     if not os.path.exists(path):
         raise FileNotFoundError(f"PDF not found: {path}")
-    
+
     pdf = PdfReader(path)
     text = ""
     for page in pdf.pages:
         extracted = page.extract_text()
         if extracted:
             text += extracted + "\n"
-    
+
     if not text.strip():
         raise ValueError(
             "Could not extract text from this PDF.\n"
             "The file may be scanned/image-based. Only text-based PDFs are supported."
         )
-    
+
     logger.info(f"PDF read: {class_name}/{subject}/{chapter} — {len(text)} chars")
     return text, path
 
@@ -114,51 +119,66 @@ def read_chapter_pdf(class_name: str, subject: str, chapter: str) -> tuple[str, 
 # STUDY SESSION
 # ─────────────────────────────────────────
 
+
 def generate_study_session(class_name: str, subject: str, chapter: str) -> dict:
     """Generate complete study session with notes, mindmap, questions."""
-    
+
     # Read PDF
     text, path = read_chapter_pdf(class_name, subject, chapter)
-    
+
     # Detect subject area
     subject_area, paper = detect_subject_area(subject, class_name)
-    
+
     # Smart truncation for notes
     max_chars = 14000
     if len(text) > max_chars:
         mid_start = len(text) // 2 - 1000
         text_for_notes = (
-            text[:8000] +
-            "\n\n[...]\n\n" +
-            text[mid_start:mid_start + 2000] +
-            "\n\n[...]\n\n" +
-            text[-2000:]
+            text[:8000]
+            + "\n\n[...]\n\n"
+            + text[mid_start : mid_start + 2000]
+            + "\n\n[...]\n\n"
+            + text[-2000:]
         )
     else:
         text_for_notes = text
-    
+
     # Generate notes
     try:
         chain = NOTES_PROMPT | get_llm()
-        res = chain.invoke({
-            "text": text_for_notes,
-            "class_name": class_name,
-            "subject": subject,
-            "subject_area": subject_area,
-            "paper": paper,
-        })
+        res = chain.invoke(
+            {
+                "text": text_for_notes,
+                "class_name": class_name,
+                "subject": subject,
+                "subject_area": subject_area,
+                "paper": paper,
+            }
+        )
         notes = res.content.strip()
     except Exception as e:
         logger.error(f"Notes generation failed: {e}")
         notes = "⚠️ Notes generation failed. Please retry."
-    
+
     # Create vector store for chat
     key = make_persist_key("ncert", class_name, subject, chapter)
-    create_vector_store(text, persist_key=key, metadata={"source_type": "ncert", "class_name": class_name, "subject": subject, "chapter": chapter, "source_title": f"NCERT {class_name} {subject} - {chapter}", "source_path": path})
-    
+    create_vector_store(
+        text,
+        persist_key=key,
+        metadata={
+            "source_type": "ncert",
+            "class_name": class_name,
+            "subject": subject,
+            "chapter": chapter,
+            "source_title": f"NCERT {class_name} {subject} - {chapter}",
+            "source_path": path,
+        },
+    )
+
     # Generate study aids (skip when notes failed)
     if notes and "Notes generation failed" not in notes:
         from src.core.study_aids import generate_study_aids
+
         mindmap_html, questions_html = generate_study_aids(text_for_notes, subject, paper)
     else:
         mindmap_html, questions_html = "", ""
@@ -175,6 +195,7 @@ def generate_study_session(class_name: str, subject: str, chapter: str) -> dict:
 # CHAT
 # ─────────────────────────────────────────
 
+
 def ask_ncert(
     question: str,
     class_name: str,
@@ -186,7 +207,7 @@ def ask_ncert(
     if not question or not question.strip():
         yield "Please ask a specific question about the chapter."
         return
-    
+
     # Load vector store (Qdrant in prod, local Chroma fallback)
     key = make_persist_key("ncert", class_name, subject, chapter)
     from src.core.vector_store import load_vector_store
@@ -200,19 +221,21 @@ def ask_ncert(
     if not ctx:
         yield "Could not find relevant content in this chapter. Try rephrasing your question."
         return
-    
+
     subject_area, paper = detect_subject_area(subject, class_name)
-    
+
     try:
         chain = CHAT_PROMPT | get_llm()
-        for chunk in chain.stream({
-            "ctx": ctx,
-            "q": question.strip(),
-            "class_name": class_name,
-            "subject": subject,
-            "subject_area": subject_area,
-            "paper": paper,
-        }):
+        for chunk in chain.stream(
+            {
+                "ctx": ctx,
+                "q": question.strip(),
+                "class_name": class_name,
+                "subject": subject,
+                "subject_area": subject_area,
+                "paper": paper,
+            }
+        ):
             if hasattr(chunk, "content"):
                 yield chunk.content
     except Exception as e:

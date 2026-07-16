@@ -18,6 +18,7 @@ Usage at every ingestion boundary, right before the text enters a prompt:
 
     chain.invoke({"text": harden_untrusted(transcript, label="lecture transcript")})
 """
+
 from __future__ import annotations
 
 # Sentinel markers for the quarantine fence. Chosen to be extremely unlikely to

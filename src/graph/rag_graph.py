@@ -32,41 +32,44 @@ that maps the state into that prompt's input variables.
 Citation / trust-note formatting lives in ``src.core.grounding`` (pure, offline
 tested) so the RAG subgraph and the mentor tool-agent share one implementation.
 """
+
 from __future__ import annotations
 
-import os
 import logging
+import os
 from typing import Callable, Literal, Optional
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from src.graph.state import AgentState
-from src.core.llm import get_llm, get_fast_llm
-from src.core.vector_store import (
-    load_vector_store,
-    similarity_search_with_sources,
+# Re-use the mentor module's web search helper for the CRAG fallback.
+from src.agents.mentor.graph import _fetch_search_context
+from src.core.grounding import (
+    derive_confidence,
+    extract_web_citations,
 )
-from src.core.prompt_safety import harden_untrusted
+from src.core.grounding import (
+    format_sources as _format_sources,
+)
+from src.core.grounding import (
+    format_trust_note as _format_trust_note,
+)
 
 # Citation + trust-note formatting is centralised in src.core.grounding so the
 # RAG subgraph and the mentor tool-agent share exactly one implementation. The
 # private aliases keep the in-graph call sites (and existing tests that import
 # ``_format_sources`` from this module) unchanged.
-from src.core.grounding import (
-    source_label as _source_label,
-    format_sources as _format_sources,
-    format_trust_note as _format_trust_note,
-    derive_confidence,
-    extract_web_citations,
+from src.core.llm import get_fast_llm, get_llm
+from src.core.prompt_safety import harden_untrusted
+from src.core.vector_store import (
+    load_vector_store,
+    similarity_search_with_sources,
 )
-
-# Re-use the mentor module's web search helper for the CRAG fallback.
-from src.agents.mentor.graph import _fetch_search_context
 from src.graph.reflection import make_reflect_node
+from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +196,7 @@ def build_rag_subgraph(
     _reflect = enable_reflection
     try:
         from src.core.config import settings as _settings
+
         if _reflect is None:
             _reflect = bool(_settings.reflection_enabled)
         reflect_min_score = int(_settings.reflection_min_score)
@@ -203,9 +207,7 @@ def build_rag_subgraph(
 
     def _evidence_of(state: AgentState) -> str:
         return "\n\n".join(
-            part
-            for part in (state.get("kb_context", ""), state.get("search_results", ""))
-            if part
+            part for part in (state.get("kb_context", ""), state.get("search_results", "")) if part
         )
 
     def retrieve_node(state: AgentState) -> dict:
@@ -240,15 +242,17 @@ def build_rag_subgraph(
                     ("system", _GRADE_SYS),
                     (
                         "human",
-                        f"Question:\n{state['question']}\n\n"
-                        f"Retrieved context:\n{context[:4000]}",
+                        f"Question:\n{state['question']}\n\nRetrieved context:\n{context[:4000]}",
                     ),
                 ]
             )
             return {"rag_relevant": bool(grade.relevant)}
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("[%s] grade failed (%s); treating context as unverified", label, exc)
-            return {"rag_relevant": False, "grounding_warning": "Retrieval relevance grading failed; context was treated as unverified."}
+            return {
+                "rag_relevant": False,
+                "grounding_warning": "Retrieval relevance grading failed; context was treated as unverified.",
+            }
 
     def route_after_grade(state: AgentState) -> Literal["web_search", "generate"]:
         """Fall back to web search only when context is not relevant."""
@@ -317,7 +321,9 @@ def build_rag_subgraph(
                 logger.warning("[%s] grounding verification failed (%s)", label, exc)
                 confidence = "medium" if has_evidence else "low"
 
-        final_answer = answer + _format_sources(citations) + _format_trust_note(confidence, unsupported_claims)
+        final_answer = (
+            answer + _format_sources(citations) + _format_trust_note(confidence, unsupported_claims)
+        )
         return {
             "answer": final_answer,
             "messages": [AIMessage(content=final_answer)],
@@ -367,9 +373,7 @@ if __name__ == "__main__":
     # Try to find an existing NCERT collection so we can test grounded retrieval.
     base = settings.chroma_persist_dir
     existing = (
-        [d for d in os.listdir(base) if d.startswith("ncert")]
-        if os.path.exists(base)
-        else []
+        [d for d in os.listdir(base) if d.startswith("ncert")] if os.path.exists(base) else []
     )
     persist_key = existing[0] if existing else ""
     print("Using persist_key:", persist_key or "(none - will test web fallback path)")
@@ -384,8 +388,11 @@ if __name__ == "__main__":
     )
     print("\n" + "=" * 60)
     print(
-        "grounded:", result.get("grounded"),
-        "| relevant:", result.get("rag_relevant"),
-        "| citations:", result.get("citations"),
+        "grounded:",
+        result.get("grounded"),
+        "| relevant:",
+        result.get("rag_relevant"),
+        "| citations:",
+        result.get("citations"),
     )
     print("ANSWER:\n", result.get("answer"))

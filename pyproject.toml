@@ -49,3 +49,14 @@ dev = [
     "pytest>=9.1.0",
     "ruff>=0.15.17",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["migrations", "frontend"]
+
+[tool.ruff.lint]
+# Conservative gate: pyflakes (F), pycodestyle (E/W), import order (I).
+select = ["E", "F", "W", "I"]
+# Line length is enforced by the formatter, not the linter (avoid churn).
+ignore = ["E501"]

@@ -22,9 +22,9 @@ import calendar
 import json
 import logging
 import ssl
-import warnings
 import urllib.parse
 import urllib.request
+import warnings
 from datetime import date
 from xml.etree import ElementTree as ET
 
@@ -34,9 +34,19 @@ logger = logging.getLogger(__name__)
 # h2 / rustls / hickory / reqwest etc.) so this ingest does not flood the
 # console with TLS-handshake and DNS spam. Purely cosmetic - no behaviour change.
 for _noisy in (
-    "h2", "hpack", "hickory_net", "hickory_resolver",
-    "rustls", "reqwest", "hyper_util", "primp",
-    "httpx", "httpcore", "urllib3", "duckduckgo_search", "ddgs",
+    "h2",
+    "hpack",
+    "hickory_net",
+    "hickory_resolver",
+    "rustls",
+    "reqwest",
+    "hyper_util",
+    "primp",
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "duckduckgo_search",
+    "ddgs",
 ):
     try:
         logging.getLogger(_noisy).setLevel(logging.WARNING)
@@ -49,8 +59,10 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_se
 
 # Browser-like UA + Accept headers. A bare/identifying UA gets 403 from some
 # sites (e.g. PIB), so we present a normal browser fingerprint.
-_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 _REQUEST_HEADERS = {
     "User-Agent": _UA,
@@ -107,9 +119,11 @@ def _google_news(query, start_iso, end_iso, per_query, timeout):
     items = []
     try:
         q = query + " after:" + start_iso + " before:" + end_iso
-        url = ("https://news.google.com/rss/search?q="
-               + urllib.parse.quote(q)
-               + "&hl=en-IN&gl=IN&ceid=IN:en")
+        url = (
+            "https://news.google.com/rss/search?q="
+            + urllib.parse.quote(q)
+            + "&hl=en-IN&gl=IN&ceid=IN:en"
+        )
         ctx = ssl.create_default_context()
         req = urllib.request.Request(url, headers=_REQUEST_HEADERS)
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
@@ -133,6 +147,7 @@ def _tavily(query, start_iso, end_iso, max_results, timeout):
     items = []
     try:
         from src.core.config import get_settings
+
         key = (get_settings().tavily_api_key or "").strip()
         if not key:
             return items
@@ -154,7 +169,7 @@ def _tavily(query, start_iso, end_iso, max_results, timeout):
         ctx = ssl.create_default_context()
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        for r in (data.get("results") or []):
+        for r in data.get("results") or []:
             title = (r.get("title") or "").strip()
             if not title:
                 continue
@@ -202,6 +217,7 @@ def _rss_feeds(start_iso, end_iso, per_feed, timeout):
     items = []
     try:
         from email.utils import parsedate_to_datetime
+
         try:
             from src.agents.current_affairs.ingest import FEEDS
         except Exception:
@@ -287,7 +303,9 @@ def fetch_month_news(month, year, per_category=6, timeout=10):
         for t in _google_news(query, start_iso, end_iso, per_category, timeout):
             _add(t)
         # Source 2: Tavily (if API key configured)
-        for t in _tavily(query + " " + str(month) + " " + str(year), start_iso, end_iso, 4, timeout):
+        for t in _tavily(
+            query + " " + str(month) + " " + str(year), start_iso, end_iso, 4, timeout
+        ):
             _add(t)
         # Source 3: DuckDuckGo (if package available)
         for t in _duckduckgo(query, month, year, 4, timeout):
@@ -306,15 +324,23 @@ def fetch_month_news(month, year, per_category=6, timeout=10):
             seen.add(key)
             rss_lines.append("- " + t)
     if rss_lines:
-        sections.append("### Official & Newspaper Feeds (PIB / The Hindu / Indian Express / Down To Earth)"
-                        + chr(10) + chr(10).join(rss_lines))
+        sections.append(
+            "### Official & Newspaper Feeds (PIB / The Hindu / Indian Express / Down To Earth)"
+            + chr(10)
+            + chr(10).join(rss_lines)
+        )
         total += len(rss_lines)
 
     if total == 0:
         return "", 0
 
-    header = ("REAL NEWS RETRIEVED for " + str(month) + " " + str(year)
-              + " (use ONLY these items; do not add anything else):")
+    header = (
+        "REAL NEWS RETRIEVED for "
+        + str(month)
+        + " "
+        + str(year)
+        + " (use ONLY these items; do not add anything else):"
+    )
     context = header + chr(10) + chr(10) + (chr(10) + chr(10)).join(sections)
     return context, total
 

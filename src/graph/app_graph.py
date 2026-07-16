@@ -15,13 +15,14 @@ Example::
     config = make_config(thread_id="user-42:session-7", user_id="user-42")
     result = app_graph.invoke({"question": "Explain DPSP"}, config)
 """
+
 from __future__ import annotations
 
 from typing import Optional
 
-from src.graph.supervisor import build_supervisor
-from src.graph.memory import get_checkpointer, get_store
 from src.core.observability import langchain_callbacks
+from src.graph.memory import get_checkpointer, get_store
+from src.graph.supervisor import build_supervisor
 
 
 def build_app():
@@ -81,9 +82,7 @@ if __name__ == "__main__":
     try:
         app = build_app()
         config = make_config(thread_id="trace-test-1", user_id="test-user")
-        result = app.invoke(
-            {"question": "Bhai polity me fundamental rights samjhao"}, config
-        )
+        result = app.invoke({"question": "Bhai polity me fundamental rights samjhao"}, config)
         print("route:", result.get("route"))
         answer = result.get("answer") or ""
         print("answer (first 500 chars):\n", answer[:500])

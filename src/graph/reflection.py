@@ -21,6 +21,7 @@ can import this file directly; langchain / langgraph / settings are imported
 lazily inside the functions that need them (same discipline as
 ``src.core.response_cache``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -121,8 +122,10 @@ def _feedback_block(critique) -> str:
     if suggestions:
         lines.append("How to improve:")
         lines += [f"- {s}" for s in suggestions]
-    return "\n".join(lines) if lines else (
-        "Improve overall quality, accuracy, coverage, and structure."
+    return (
+        "\n".join(lines)
+        if lines
+        else ("Improve overall quality, accuracy, coverage, and structure.")
     )
 
 
@@ -182,10 +185,7 @@ def revise_answer(question, answer, critique, *, evidence="", tier="strong"):
                 "EVIDENCE (stay consistent; do not contradict it or go beyond "
                 f"it):\n{evidence[:6000]}\n\n"
             )
-        human += (
-            f"CURRENT ANSWER:\n{answer}\n\n"
-            f"REVIEWER FEEDBACK:\n{_feedback_block(critique)}"
-        )
+        human += f"CURRENT ANSWER:\n{answer}\n\nREVIEWER FEEDBACK:\n{_feedback_block(critique)}"
         resp = llm.invoke([("system", _REVISE_SYS), ("human", human)])
         revised = resp.content if hasattr(resp, "content") else str(resp)
         revised = (revised or "").strip()
@@ -231,8 +231,11 @@ def make_reflect_node(
         last_score = None
         while True:
             critique = critique_answer(
-                question, answer, evidence=evidence,
-                min_score=min_score, tier=critic_tier,
+                question,
+                answer,
+                evidence=evidence,
+                min_score=min_score,
+                tier=critic_tier,
             )
             last_score = getattr(critique, "score", None)
             if not should_revise(
@@ -244,7 +247,11 @@ def make_reflect_node(
             ):
                 break
             answer = revise_answer(
-                question, answer, critique, evidence=evidence, tier=revise_tier,
+                question,
+                answer,
+                critique,
+                evidence=evidence,
+                tier=revise_tier,
             )
             revisions += 1
         return {

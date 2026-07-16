@@ -1,3 +1,14 @@
+---
+title: UPSC AI Pro Backend
+emoji: 🎓
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: FastAPI + LangGraph backend for UPSC AI Pro
+---
+
 <div align="center">
 
 # UPSC AI Pro 🎓

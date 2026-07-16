@@ -7,6 +7,7 @@ not skew the numbers.
 
 The monitoring route reads `METRICS.snapshot()`.
 """
+
 import threading
 import time
 from collections import defaultdict, deque

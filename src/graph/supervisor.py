@@ -17,25 +17,26 @@ structured parameters from ``state['task_inputs']``; rag additionally needs
 ``state['persist_key']``. A caller may also force a route by pre-setting
 ``state['route']`` (e.g. when the UI already knows the target).
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Literal
 
-from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from src.graph.state import AgentState
 from src.core.llm import get_fast_llm
-from src.graph.mentor_graph import build_mentor_graph, _mentor_context
-from src.graph.rag_graph import build_rag_subgraph
 from src.graph.agent_subgraphs import (
-    build_planner_subgraph,
-    build_evaluator_subgraph,
     build_current_affairs_subgraph,
+    build_evaluator_subgraph,
+    build_planner_subgraph,
 )
+from src.graph.mentor_graph import _mentor_context, build_mentor_graph
 from src.graph.plan_execute import build_plan_execute_graph, is_complex
+from src.graph.rag_graph import build_rag_subgraph
+from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +100,13 @@ def build_supervisor(checkpointer=None, store=None):
     plan_execute_min_words = 30
     try:
         from src.core.config import settings
+
         plan_execute_on = bool(settings.plan_execute_enabled)
         plan_execute_min_words = int(settings.plan_execute_min_words)
     except Exception:  # pragma: no cover - settings present in app
         plan_execute_on = False
     plan_execute = (
-        build_plan_execute_graph(extra_context=_mentor_context)
-        if plan_execute_on
-        else None
+        build_plan_execute_graph(extra_context=_mentor_context) if plan_execute_on else None
     )
 
     def supervisor_node(state: AgentState) -> dict:
@@ -165,10 +165,10 @@ if __name__ == "__main__":
     app = build_supervisor(checkpointer=InMemorySaver())
 
     samples = [
-        "Bhai polity me fundamental rights samjhao",            # -> mentor
-        "Mera 2027 ka plan bana do, 8 ghante padh sakta hu",   # -> planner
-        "Meri answer check karo aur marks do",                 # -> evaluator
-        "Aaj ke current affairs do",                           # -> current_affairs
+        "Bhai polity me fundamental rights samjhao",  # -> mentor
+        "Mera 2027 ka plan bana do, 8 ghante padh sakta hu",  # -> planner
+        "Meri answer check karo aur marks do",  # -> evaluator
+        "Aaj ke current affairs do",  # -> current_affairs
     ]
 
     # Routing-only preview (cheap: just the classifier, no heavy execution).

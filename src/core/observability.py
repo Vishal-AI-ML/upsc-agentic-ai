@@ -14,6 +14,7 @@ Usage (llm.py):
 
 Supports both Langfuse v3 (langfuse.langchain) and v2 (langfuse.callback).
 """
+
 import logging
 import os
 from functools import lru_cache
@@ -37,9 +38,7 @@ def _export_env() -> None:
 def langfuse_enabled() -> bool:
     """True only if explicitly enabled AND both keys are present."""
     return bool(
-        settings.langfuse_enabled
-        and settings.langfuse_public_key
-        and settings.langfuse_secret_key
+        settings.langfuse_enabled and settings.langfuse_public_key and settings.langfuse_secret_key
     )
 
 
@@ -53,6 +52,7 @@ def get_langfuse_handler():
     # Langfuse v3 (OpenTelemetry-based)
     try:
         from langfuse.langchain import CallbackHandler
+
         handler = CallbackHandler()
         logger.info("Langfuse tracing enabled (v3)")
         return handler
@@ -61,6 +61,7 @@ def get_langfuse_handler():
     # Langfuse v2 fallback
     try:
         from langfuse.callback import CallbackHandler as _CBv2
+
         handler = _CBv2(
             public_key=settings.langfuse_public_key,
             secret_key=settings.langfuse_secret_key,
@@ -133,6 +134,7 @@ def flush() -> None:
     # v3: flush via global client
     try:
         from langfuse import get_client
+
         get_client().flush()
         logger.info("Langfuse traces flushed (v3)")
         return
@@ -150,10 +152,12 @@ def flush() -> None:
 
 # ---------- Eval metrics (Phase 3B) ----------
 
+
 def _has_active_span() -> bool:
     """True only if we are inside a live OTEL span (Langfuse v3 trace context)."""
     try:
         from opentelemetry import trace as _otel
+
         span = _otel.get_current_span()
         ctx = span.get_span_context() if span is not None else None
         return bool(ctx and ctx.is_valid)
@@ -169,6 +173,7 @@ def score(name, value, comment=None):
         return
     try:
         from langfuse import get_client
+
         get_client().score_current_trace(name=name, value=float(value), comment=comment)
     except Exception as e:
         logger.debug(f"Langfuse score skipped: {e}")

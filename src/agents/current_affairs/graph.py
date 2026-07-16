@@ -3,12 +3,10 @@ Current Affairs Agent - Daily CA, Editorials, Monthly Digest
 """
 
 import logging
-from datetime import date, timedelta, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
+from src.agents.current_affairs.prompts import DAILY_CA_PROMPT, EDITORIAL_PROMPT, MONTHLY_PROMPT
 from src.core.llm import get_llm
-from src.agents.current_affairs.prompts import (
-    DAILY_CA_PROMPT, EDITORIAL_PROMPT, MONTHLY_PROMPT
-)
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +16,13 @@ logger = logging.getLogger(__name__)
 
 try:
     import pytz
+
     IST = pytz.timezone("Asia/Kolkata")
+
     def _today_ist() -> date:
         return datetime.now(IST).date()
 except ImportError:
+
     def _today_ist() -> date:
         return (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).date()
 
@@ -74,11 +75,13 @@ EDITORIAL_TOPICS = [
 # STREAMING FUNCTIONS
 # ─────────────────────────────────────────
 
+
 def get_daily_ca(selected_date: str):
     """Generate daily current affairs (streaming), grounded in real RSS headlines when available."""
     news_context = ""
     try:
         from src.agents.current_affairs.ingest import fetch_headlines
+
         headlines = fetch_headlines(limit=25)
         if headlines:
             # RSS titles/descriptions are UNTRUSTED external text - fence them
@@ -86,15 +89,27 @@ def get_daily_ca(selected_date: str):
             from src.core.prompt_safety import harden_untrusted
 
             headlines = harden_untrusted(headlines, label="news headlines")
-            news_context = "REAL HEADLINES + SHORT SNIPPETS (this is the ENTIRE source text available — there are no full articles; ground every topic strictly in these and invent nothing beyond them):" + chr(10) + headlines
+            news_context = (
+                "REAL HEADLINES + SHORT SNIPPETS (this is the ENTIRE source text available — there are no full articles; ground every topic strictly in these and invent nothing beyond them):"
+                + chr(10)
+                + headlines
+            )
     except Exception as e:
         logger.warning(f"CA headline grounding unavailable: {e}")
 
     if news_context:
-        yield "> 📡 Grounded in today's news feeds (PIB, The Hindu, Indian Express, Down To Earth). Cross-verify before the exam." + chr(10) + chr(10)
+        yield (
+            "> 📡 Grounded in today's news feeds (PIB, The Hindu, Indian Express, Down To Earth). Cross-verify before the exam."
+            + chr(10)
+            + chr(10)
+        )
     else:
         news_context = "No live headlines available - clearly flag every item as indicative and to be verified."
-        yield "> ⚠️ Live news feed unavailable - items below are AI-generated and indicative. Verify against the day's newspaper/PIB before relying on them." + chr(10) + chr(10)
+        yield (
+            "> ⚠️ Live news feed unavailable - items below are AI-generated and indicative. Verify against the day's newspaper/PIB before relying on them."
+            + chr(10)
+            + chr(10)
+        )
 
     try:
         chain = DAILY_CA_PROMPT | get_llm()
@@ -108,7 +123,11 @@ def get_daily_ca(selected_date: str):
 
 def get_editorial(topic: str):
     """Generate editorial analysis (streaming)."""
-    yield "> ⚠️ AI-generated analytical editorial - the framework and arguments are the real value. Cross-check every specific fact, figure, date, and scheme detail before using it in the exam." + chr(10) + chr(10)
+    yield (
+        "> ⚠️ AI-generated analytical editorial - the framework and arguments are the real value. Cross-check every specific fact, figure, date, and scheme detail before using it in the exam."
+        + chr(10)
+        + chr(10)
+    )
     try:
         chain = EDITORIAL_PROMPT | get_llm()
         for chunk in chain.stream({"topic": topic}):
@@ -127,20 +146,40 @@ def get_monthly_summary(month: str, year: str):
     count = 0
     try:
         from src.agents.current_affairs.monthly_ingest import fetch_month_news
+
         news_context, count = fetch_month_news(month, year)
     except Exception as e:
         logger.warning(f"Monthly news grounding unavailable: {e}")
 
     if count == 0:
-        yield ("> ⚠️ **Verified news archive not available for " + str(month) + " " + str(year) + ".**" + chr(10) + chr(10)
-               + "Free news sources returned nothing reliable for this month (common for older months, or when the network/feeds are temporarily unavailable). "
-               + "To avoid giving you fabricated current affairs, no digest was generated." + chr(10) + chr(10)
-               + "**What you can do:** pick a more recent month, or revise this month from a monthly magazine / PIB / The Hindu." + chr(10))
+        yield (
+            "> ⚠️ **Verified news archive not available for "
+            + str(month)
+            + " "
+            + str(year)
+            + ".**"
+            + chr(10)
+            + chr(10)
+            + "Free news sources returned nothing reliable for this month (common for older months, or when the network/feeds are temporarily unavailable). "
+            + "To avoid giving you fabricated current affairs, no digest was generated."
+            + chr(10)
+            + chr(10)
+            + "**What you can do:** pick a more recent month, or revise this month from a monthly magazine / PIB / The Hindu."
+            + chr(10)
+        )
         return
 
-    yield ("> 📡 Grounded in real news retrieved from free sources (Google News, Tavily, DuckDuckGo) for "
-           + str(month) + " " + str(year) + " - " + str(count)
-           + " items organised below. Still cross-verify figures against PIB / The Hindu before the exam." + chr(10) + chr(10))
+    yield (
+        "> 📡 Grounded in real news retrieved from free sources (Google News, Tavily, DuckDuckGo) for "
+        + str(month)
+        + " "
+        + str(year)
+        + " - "
+        + str(count)
+        + " items organised below. Still cross-verify figures against PIB / The Hindu before the exam."
+        + chr(10)
+        + chr(10)
+    )
 
     # Retrieved month news is UNTRUSTED external text - fence it before the prompt.
     if news_context:
@@ -161,6 +200,7 @@ def get_monthly_summary(month: str, year: str):
 # ─────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────
+
 
 def get_editorial_topics() -> list:
     """Get available editorial topics."""

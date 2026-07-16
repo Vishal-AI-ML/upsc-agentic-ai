@@ -5,6 +5,7 @@ the gate) and _detect_topic (to simulate the classifier's verdict), then assert
 that process_lecture raises ValueError for clearly non-teaching content. This
 exercises the REAL gate logic inside process_lecture.
 """
+
 import pytest
 
 VALID_URL = "https://www.youtube.com/watch?v=abcdefghijk"
@@ -18,8 +19,12 @@ def _patch_transcript(monkeypatch, lg):
 
 def _topic(**override):
     base = {
-        "topic": "Some Topic", "paper": "GS2", "syllabus": "Polity",
-        "subtopics": [], "content_type": "teaching", "relevant": True,
+        "topic": "Some Topic",
+        "paper": "GS2",
+        "syllabus": "Polity",
+        "subtopics": [],
+        "content_type": "teaching",
+        "relevant": True,
     }
     base.update(override)
     return base
@@ -27,9 +32,11 @@ def _topic(**override):
 
 def test_gate_blocks_entertainment(monkeypatch):
     import src.agents.lecture.graph as lg
+
     _patch_transcript(monkeypatch, lg)
     monkeypatch.setattr(
-        lg, "_detect_topic",
+        lg,
+        "_detect_topic",
         lambda text: _topic(content_type="entertainment", relevant=False),
     )
     with pytest.raises(ValueError):
@@ -38,6 +45,7 @@ def test_gate_blocks_entertainment(monkeypatch):
 
 def test_gate_blocks_multi_paper_overview(monkeypatch):
     import src.agents.lecture.graph as lg
+
     _patch_transcript(monkeypatch, lg)
     monkeypatch.setattr(lg, "_detect_topic", lambda text: _topic(paper="GS1, GS2, GS3, GS4"))
     with pytest.raises(ValueError):
@@ -46,6 +54,7 @@ def test_gate_blocks_multi_paper_overview(monkeypatch):
 
 def test_gate_blocks_not_applicable_paper(monkeypatch):
     import src.agents.lecture.graph as lg
+
     _patch_transcript(monkeypatch, lg)
     monkeypatch.setattr(lg, "_detect_topic", lambda text: _topic(paper="Not Applicable"))
     with pytest.raises(ValueError):
@@ -54,5 +63,6 @@ def test_gate_blocks_not_applicable_paper(monkeypatch):
 
 def test_invalid_youtube_url_rejected():
     import src.agents.lecture.graph as lg
+
     with pytest.raises(ValueError):
         lg.process_lecture("https://example.com/not-a-video")

@@ -1,10 +1,11 @@
 """Tests for the prompt-injection hardening helper (pure, offline)."""
+
 from src.core.prompt_safety import (
+    _FENCE_BEGIN,
+    _FENCE_END,
     harden_untrusted,
     sanitize_untrusted,
     wrap_untrusted,
-    _FENCE_BEGIN,
-    _FENCE_END,
 )
 
 

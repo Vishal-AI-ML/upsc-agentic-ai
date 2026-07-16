@@ -1,8 +1,9 @@
 """Per-user conversation history helpers."""
+
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from src.core.models import Conversation, Message

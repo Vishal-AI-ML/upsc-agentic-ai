@@ -3,6 +3,7 @@
 Kept dependency-free (no pydantic / no app imports) so the validation logic can
 be unit-tested in isolation and reused wherever a secret must be checked.
 """
+
 from __future__ import annotations
 
 import logging

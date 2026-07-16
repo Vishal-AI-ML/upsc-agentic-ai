@@ -1,4 +1,5 @@
 """Offline tests for pure study-plan timeline helpers (no LLM / network)."""
+
 from datetime import datetime
 
 from src.core.plan_timeline import (

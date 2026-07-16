@@ -1,6 +1,6 @@
 # UPSC AI Pro \u2014 Frontend (React + Vite + TypeScript + Tailwind)
 
-Modern SPA that replaces the old single-file `upsc-frontend/app-frontend.html`.
+Modern SPA — the single canonical frontend.
 It talks to the same FastAPI backend (`/api/v1`), so nothing on the server
 changes.
 
@@ -57,7 +57,7 @@ backend's CORS config / `FRONTEND_URL` env.
 - **Environment variable:** `VITE_API_BASE = https://upsc-agentic-ai.onrender.com/api/v1`
 - `vercel.json` already adds the SPA rewrite so refreshing a deep link works.
 
-The old `upsc-frontend/` HTML is left untouched so your current deploy keeps
+The old `upsc-frontend/` HTML has been removed; `frontend/` is now the only frontend and keeps
 working until you switch Vercel's root directory to `frontend`.
 
 ## Structure

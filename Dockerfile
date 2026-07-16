@@ -35,7 +35,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     VIRTUAL_ENV=/opt/venv \
-    PORT=8000
+    HOME=/home/user \
+    XDG_CACHE_HOME=/home/user/.cache \
+    HF_HOME=/home/user/.cache/huggingface \
+    MPLCONFIGDIR=/home/user/.cache/matplotlib \
+    FASTEMBED_CACHE_DIR=/home/user/.cache/fastembed \
+    PORT=7860
 
 # libpq for psycopg runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -48,11 +53,14 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY . .
 
-# Run as non-root.
-RUN useradd -m -u 10001 appuser && chown -R appuser:appuser /app
-USER appuser
+# Run as non-root. HF Spaces convention: uid 1000, writable /home/user.
+RUN useradd -m -u 1000 user && \
+    mkdir -p /home/user/.cache && \
+    chown -R user:user /app /home/user
+USER user
 
-EXPOSE 8000
+# HF Spaces routes to app_port (see README frontmatter). Keep in sync with PORT.
+EXPOSE 7860
 
 # Container-level health check hitting the FastAPI /health endpoint.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

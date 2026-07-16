@@ -1,27 +1,34 @@
 """Auth routes - register + login."""
+
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-import logging
-
-from src.core.users import (
-    authenticate, create_user, get_user_by_email, set_password,
-)
-from src.core.security import create_access_token
-from src.core.refresh_tokens import (
-    issue_refresh_token, rotate_refresh_token, revoke_refresh_token,
-)
-from src.core.reset_tokens import create_reset_token, consume_reset_token
-from src.core.verification_tokens import (
-    create_verification_token, consume_verification_token,
-)
-from src.core.email_utils import send_reset_email, send_verification_email, verification_enforced
-from src.core.models import User
+from src.api.deps import get_current_user
 from src.core.config import settings
 from src.core.db import get_db
-from src.api.deps import get_current_user
+from src.core.email_utils import send_reset_email, send_verification_email, verification_enforced
+from src.core.models import User
+from src.core.refresh_tokens import (
+    issue_refresh_token,
+    revoke_refresh_token,
+    rotate_refresh_token,
+)
+from src.core.reset_tokens import consume_reset_token, create_reset_token
+from src.core.security import create_access_token
+from src.core.users import (
+    authenticate,
+    create_user,
+    get_user_by_email,
+    set_password,
+)
+from src.core.verification_tokens import (
+    consume_verification_token,
+    create_verification_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
@@ -34,9 +41,7 @@ class RegisterRequest(BaseModel):
 
 
 def _token_for(db: Session, user) -> dict:
-    token = create_access_token(
-        {"sub": user.id, "email": user.email, "name": user.name}
-    )
+    token = create_access_token({"sub": user.id, "email": user.email, "name": user.name})
     refresh = issue_refresh_token(db, user.id)
     return {
         "access_token": token,
@@ -71,9 +76,7 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
     try:
         user = create_user(db, body.email, body.password, body.name)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if verification_enforced():
         _send_verification(db, user)
         return {
@@ -139,9 +142,7 @@ async def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token. Please sign in again.",
         )
-    access = create_access_token(
-        {"sub": user.id, "email": user.email, "name": user.name}
-    )
+    access = create_access_token({"sub": user.id, "email": user.email, "name": user.name})
     return {
         "access_token": access,
         "refresh_token": new_refresh,
@@ -247,4 +248,6 @@ async def resend_verification(body: ResendVerificationRequest, db: Session = Dep
     user = get_user_by_email(db, body.email)
     if user and not user.email_verified:
         _send_verification(db, user)
-    return {"message": "If an unverified account exists for that email, a new verification link has been sent."}
+    return {
+        "message": "If an unverified account exists for that email, a new verification link has been sent."
+    }

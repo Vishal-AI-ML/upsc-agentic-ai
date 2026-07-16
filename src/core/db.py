@@ -6,14 +6,17 @@ Multi-user data layer. Uses DATABASE_URL from settings:
   - Local fallback: SQLite file (no setup needed)
 Swap DBs by changing DATABASE_URL only - no code change.
 """
-import logging
 
-from sqlalchemy import create_engine, inspect, text
+import logging
+import pathlib
+
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 # Normalize the URL so it survives copy/paste into host dashboards (Render etc.):
 #   * strip stray whitespace and surrounding quotes
@@ -58,6 +61,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
+
     pass
 
 
@@ -70,40 +74,27 @@ def get_db():
         db.close()
 
 
-def _run_lightweight_migrations() -> None:
-    """Add columns introduced after the initial release for existing DBs (no Alembic).
+def run_migrations() -> None:
+    """Bring the schema to head via Alembic -- the single source of truth.
 
-    Currently: users.email_verified. Existing users are grandfathered as verified
-    so the new email-verification gate never locks out anyone already registered.
+    Runs the same ``alembic upgrade head`` used in production (see render.yaml)
+    but in-process, so local dev and the test suite converge on one mechanism.
+    The Alembic env resolves the DB URL from ``get_database_url()``, so this
+    always targets the app's configured database. ``upgrade`` is idempotent: a
+    no-op at head, and it safely stamps a legacy pre-Alembic database on first
+    run (the baseline migration is written to tolerate that).
     """
-    try:
-        insp = inspect(engine)
-        if "users" not in insp.get_table_names():
-            return
-        cols = {c["name"] for c in insp.get_columns("users")}
-        if "email_verified" not in cols:
-            is_sqlite = _db_url.startswith("sqlite")
-            ddl = (
-                "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0"
-                if is_sqlite else
-                "ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT false"
-            )
-            grandfather = (
-                "UPDATE users SET email_verified = 1" if is_sqlite
-                else "UPDATE users SET email_verified = true"
-            )
-            with engine.begin() as conn:
-                conn.execute(text(ddl))
-                conn.execute(text(grandfather))
-            logger.info("Migration: added users.email_verified (existing users grandfathered as verified)")
-    except Exception as e:  # noqa: BLE001
-        logger.warning(f"Lightweight migration check failed: {e}")
+    from alembic import command
+    from alembic.config import Config
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "migrations"))
+    command.upgrade(cfg, "head")
 
 
 def init_db() -> None:
-    """Create tables if missing. Imports models so they register on Base."""
-    from src.core import models  # noqa: F401  (registers tables)
-    Base.metadata.create_all(bind=engine)
-    _run_lightweight_migrations()
+    """Ensure the database schema is at the latest Alembic revision."""
+    run_migrations()
     safe = _db_url.split("@")[-1] if "@" in _db_url else _db_url
-    logger.info(f"Database ready: {safe}")
+    logger.info(f"Database ready (Alembic head): {safe}")

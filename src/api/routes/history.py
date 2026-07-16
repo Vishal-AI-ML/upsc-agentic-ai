@@ -1,17 +1,18 @@
 """History routes - per-user conversations & messages."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from src.core.db import get_db
 from src.api.deps import get_current_user
 from src.core import history as hist
+from src.core.db import get_db
 
 router = APIRouter(prefix="/history", tags=["History"])
 
 
 class SaveMessageRequest(BaseModel):
-    role: str                       # "user" or "assistant"
+    role: str  # "user" or "assistant"
     content: str
     agent: str = "general"
     conversation_id: str | None = None

@@ -138,4 +138,4 @@ agent resolves per-tier models via `get_llm_for_tier()`.
   Docker/K8s/observability stack required for development.
 - Cloud services (free tier): Qdrant (vectors), Postgres (state/checkpoints),
   Google Gemini / Groq (LLMs), Tavily (web search), Langfuse (tracing).
-- Deploy config: `render.yaml`. Frontend lives in `upsc-frontend/`.
+- Deploy config: `render.yaml`. Frontend lives in `frontend/` (Vite + React SPA).

@@ -11,23 +11,22 @@ callers do not need to know which store is active. Each persist_key maps to one
 Qdrant collection (or one on-disk Chroma directory in the fallback path).
 """
 
+import logging
 import os
 import shutil
-import logging
 from typing import Any, Optional
-
-from src.core.retrieval import (
-    rerank_scored_documents,
-    cross_encoder_rerank,
-    expand_queries,
-    generate_hypothetical_document,
-)
 
 from langchain_core.embeddings import Embeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.core.config import settings
+from src.core.retrieval import (
+    cross_encoder_rerank,
+    expand_queries,
+    generate_hypothetical_document,
+    rerank_scored_documents,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +119,7 @@ def _make_local_embeddings():
     try:
         from langchain_community.embeddings import FastEmbedEmbeddings
     except ImportError as e:
-        raise ImportError(
-            "EMBEDDING_PROVIDER=local needs FastEmbed. Run: uv add fastembed"
-        ) from e
+        raise ImportError("EMBEDDING_PROVIDER=local needs FastEmbed. Run: uv add fastembed") from e
     kwargs = {"model_name": settings.local_embedding_model}
     if settings.fastembed_cache_dir:
         kwargs["cache_dir"] = settings.fastembed_cache_dir
@@ -168,9 +165,7 @@ def _make_openai_compat_embeddings():
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as e:
-        raise ImportError(
-            "EMBEDDING_PROVIDER=openai_compat needs: uv add langchain-openai"
-        ) from e
+        raise ImportError("EMBEDDING_PROVIDER=openai_compat needs: uv add langchain-openai") from e
     return OpenAIEmbeddings(
         model=settings.openai_embed_model,
         base_url=settings.openai_embed_base_url,
@@ -205,14 +200,10 @@ def get_embeddings():
             )
         elif provider == "ollama":
             _embeddings_instance = _make_ollama_embeddings()
-            logger.info(
-                f"Embeddings initialized: ollama / {settings.ollama_embedding_model}"
-            )
+            logger.info(f"Embeddings initialized: ollama / {settings.ollama_embedding_model}")
         elif provider in ("openai_compat", "openai", "nvidia", "cloud"):
             _embeddings_instance = _make_openai_compat_embeddings()
-            logger.info(
-                f"Embeddings initialized: openai_compat / {settings.openai_embed_model}"
-            )
+            logger.info(f"Embeddings initialized: openai_compat / {settings.openai_embed_model}")
         else:
             _embeddings_instance = _make_gemini_embeddings()
             logger.info(f"Embeddings initialized: gemini / {settings.embedding_model}")
@@ -386,9 +377,7 @@ def ensure_vector_storage() -> bool:
     if _use_qdrant():
         try:
             get_qdrant_client().get_collections()
-            logger.info(
-                f"Vector store backend: Qdrant (durable, managed) -> {settings.qdrant_url}"
-            )
+            logger.info(f"Vector store backend: Qdrant (durable, managed) -> {settings.qdrant_url}")
             return True
         except Exception as e:  # noqa: BLE001
             logger.error(
@@ -450,13 +439,9 @@ def load_vector_store(persist_key: str) -> Optional[Any]:
         # Skip a dimension-mismatched collection rather than crashing on query;
         # the ingest path will recreate it at the correct size.
         if not _qdrant_dim_ok(client, name, embeddings):
-            logger.warning(
-                f"Qdrant collection '{name}' has mismatched dim; ignoring on load."
-            )
+            logger.warning(f"Qdrant collection '{name}' has mismatched dim; ignoring on load.")
             return None
-        return QdrantVectorStore(
-            client=client, collection_name=name, embedding=embeddings
-        )
+        return QdrantVectorStore(client=client, collection_name=name, embedding=embeddings)
 
     from langchain_chroma import Chroma
 
@@ -490,9 +475,7 @@ def upsert_documents(persist_key: str, docs, rebuild: bool = False) -> Optional[
             client.delete_collection(name)
             logger.info(f"Qdrant collection dropped for rebuild: {name}")
         _ensure_qdrant_collection(client, name, embeddings)
-        store = QdrantVectorStore(
-            client=client, collection_name=name, embedding=embeddings
-        )
+        store = QdrantVectorStore(client=client, collection_name=name, embedding=embeddings)
         store.add_documents(docs)
         logger.info(f"Qdrant indexed {len(docs)} chunks -> collection '{name}'")
         return store
@@ -666,14 +649,15 @@ def similarity_search(
         relevant = [row for row in ranked if row["score"] is not None and row["score"] >= threshold]
         try:
             from src.core import observability
-            observability.log_retrieval_metrics(label, q, k, len(relevant), [row["score"] for row in ranked])
+
+            observability.log_retrieval_metrics(
+                label, q, k, len(relevant), [row["score"] for row in ranked]
+            )
         except Exception:
             pass
         if not relevant:
             best = max([row["score"] or 0.0 for row in ranked], default=0.0) or 0.0
-            logger.info(
-                f"No chunks cleared relevance threshold {threshold} (best={best:.3f})"
-            )
+            logger.info(f"No chunks cleared relevance threshold {threshold} (best={best:.3f})")
             return ""
         return "\n\n".join(row["doc"].page_content for row in relevant)
     except Exception as e:
@@ -718,16 +702,19 @@ def similarity_search_with_sources(
         score = row["score"]
         doc = row["doc"]
         if score is None or score >= threshold:
-            chunks.append({
-                "excerpt": doc.page_content,
-                "score": score,
-                "lexical_score": row["lexical_score"],
-                "hybrid_score": row["hybrid_score"],
-                "metadata": dict(getattr(doc, "metadata", {}) or {}),
-            })
+            chunks.append(
+                {
+                    "excerpt": doc.page_content,
+                    "score": score,
+                    "lexical_score": row["lexical_score"],
+                    "hybrid_score": row["hybrid_score"],
+                    "metadata": dict(getattr(doc, "metadata", {}) or {}),
+                }
+            )
     context = "\n\n".join(c["excerpt"] for c in chunks)
     try:
         from src.core import observability
+
         observability.log_retrieval_metrics(label, q, k, len(chunks), [c["score"] for c in chunks])
     except Exception:
         pass

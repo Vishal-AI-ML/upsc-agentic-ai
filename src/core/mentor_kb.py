@@ -17,8 +17,9 @@ Backend follows src.core.vector_store (Qdrant in prod, local Chroma fallback).
 Rebuild whenever the facts file changes or topper videos are added:
     python scripts/ingest_mentor_kb.py
 """
-import os
+
 import logging
+import os
 from typing import Optional
 
 from src.core.vector_store import (
@@ -42,9 +43,7 @@ KB_THRESHOLD = float(os.getenv("MENTOR_KB_THRESHOLD", "0.25"))
 
 def kb_location() -> str:
     """Human-readable location of the mentor KB (Qdrant collection or on-disk dir)."""
-    return (
-        f"qdrant:{collection_for(KB_KEY)}" if _use_qdrant() else persist_dir_for(KB_KEY)
-    )
+    return f"qdrant:{collection_for(KB_KEY)}" if _use_qdrant() else persist_dir_for(KB_KEY)
 
 
 # Backwards-compatible alias kept for the ingest script's logging.
@@ -121,6 +120,7 @@ def search_kb(query: str, k: int = 4, min_score: Optional[float] = None) -> dict
 
     try:
         from src.core import observability
+
         observability.log_retrieval_metrics("mentor_kb", q, k, len(parts), [s for _, s in scored])
     except Exception:
         pass

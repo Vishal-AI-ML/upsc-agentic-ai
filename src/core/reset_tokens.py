@@ -3,6 +3,7 @@
 The raw token is returned only once (emailed in the reset link). Only its
 SHA-256 hash is stored, so a DB leak cannot be used to reset passwords.
 """
+
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -46,9 +47,7 @@ def consume_reset_token(db: Session, raw_token: str) -> str | None:
     if not raw_token:
         return None
     row = db.scalar(
-        select(PasswordResetToken).where(
-            PasswordResetToken.token_hash == _hash_token(raw_token)
-        )
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == _hash_token(raw_token))
     )
     if not row or row.used_at is not None:
         return None

@@ -1,7 +1,8 @@
 """Tests for JWT secret hardening (pure, offline)."""
+
 import pytest
 
-from src.core.secret_utils import resolve_jwt_secret, MIN_JWT_SECRET_LEN
+from src.core.secret_utils import MIN_JWT_SECRET_LEN, resolve_jwt_secret
 
 
 def test_strong_secret_passthrough():

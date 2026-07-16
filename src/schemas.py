@@ -2,13 +2,14 @@
 Pydantic schemas for request/response models
 """
 
-from pydantic import BaseModel, Field
 from typing import Optional
 
+from pydantic import BaseModel, Field
 
 # ─────────────────────────────────────────
 # COMMON SCHEMAS
 # ─────────────────────────────────────────
+
 
 class ChatMessage(BaseModel):
     role: str = Field(..., description="'user' or 'assistant'")
@@ -27,6 +28,7 @@ class ChatResponse(BaseModel):
 # ─────────────────────────────────────────
 # MENTOR SCHEMAS
 # ─────────────────────────────────────────
+
 
 class StudentContext(BaseModel):
     name: Optional[str] = None
@@ -54,6 +56,7 @@ class MentorResponse(BaseModel):
 # PLANNER SCHEMAS
 # ─────────────────────────────────────────
 
+
 class PlannerRequest(BaseModel):
     goal: str = Field(..., description="e.g., 'UPSC 2026'")
     hours: str = Field(default="6", description="Daily study hours")
@@ -70,6 +73,7 @@ class PlannerResponse(BaseModel):
 # ─────────────────────────────────────────
 # NCERT SCHEMAS
 # ─────────────────────────────────────────
+
 
 class NCERTSessionRequest(BaseModel):
     class_name: str
@@ -100,6 +104,7 @@ class NCERTListResponse(BaseModel):
 # LECTURE SCHEMAS
 # ─────────────────────────────────────────
 
+
 class LectureRequest(BaseModel):
     youtube_url: str = Field(..., description="YouTube video URL")
     medium: str = Field("English", description="Notes output language: English / Hindi / Hinglish")
@@ -128,6 +133,7 @@ class LectureChatRequest(BaseModel):
 # ─────────────────────────────────────────
 # CURRENT AFFAIRS SCHEMAS
 # ─────────────────────────────────────────
+
 
 class DailyCARequest(BaseModel):
     date: str = Field(..., description="Date in 'DD Month YYYY' format")
@@ -158,6 +164,7 @@ class AvailableMonthsResponse(BaseModel):
 # UPLOAD SCHEMAS
 # ─────────────────────────────────────────
 
+
 class UploadResponse(BaseModel):
     success: bool
     filename: str
@@ -177,6 +184,7 @@ class UploadChatRequest(BaseModel):
 # PYQ SCHEMAS
 # ─────────────────────────────────────────
 
+
 class QuestionGenRequest(BaseModel):
     topic: str = Field(..., min_length=1)
     question_type: str = Field(default="mcq", description="'mcq' or 'mains'")
@@ -193,17 +201,6 @@ class ParseResponse(BaseModel):
     questions: list[dict]
 
 
-class HintRequest(BaseModel):
-    question: str
-    options: list[str]
-
-
-class ExplanationRequest(BaseModel):
-    question: str
-    options: list[str]
-    answer: str
-
-
 class TopicSuggestionsResponse(BaseModel):
     topics: list[str]
 
@@ -211,6 +208,7 @@ class TopicSuggestionsResponse(BaseModel):
 # ─────────────────────────────────────────
 # EVALUATOR SCHEMAS
 # ─────────────────────────────────────────
+
 
 class EvaluateRequest(BaseModel):
     question: str = Field(..., min_length=5)
@@ -236,6 +234,7 @@ class ModelAnswerRequest(BaseModel):
 # PYQ BANK SCHEMAS (personal, grounded on user-uploaded papers)
 # ─────────────────────────────────────────
 
+
 class BankGenRequest(BaseModel):
     topic: str = Field(default="", description="Topic to focus on; empty = mixed from the bank")
     question_type: str = Field(default="mcq", description="'mcq' or 'mains'")
@@ -260,8 +259,10 @@ class BankStatusResponse(BaseModel):
 # STRUCTURED EVALUATION / PLAN SCHEMAS (#5)
 # ─────────────────────────────────────────
 
+
 class AnswerEvaluation(BaseModel):
     """Structured view of a basic answer evaluation (parsed from markdown)."""
+
     score: Optional[float] = None
     max_score: int = 10
     did_well: list[str] = Field(default_factory=list)
@@ -271,6 +272,7 @@ class AnswerEvaluation(BaseModel):
 
 class MainsEvaluation(BaseModel):
     """Structured view of a mains answer evaluation (parsed from markdown)."""
+
     score: Optional[float] = None
     max_marks: int = 10
     verdict: Optional[str] = None
@@ -281,16 +283,8 @@ class MainsEvaluation(BaseModel):
 
 class StudyPlanMeta(BaseModel):
     """Deterministic, code-derived study-plan metadata (no LLM parsing)."""
+
     attempt_year: int
     months_left: int
     timeline_msg: str
     prelims_date: Optional[str] = None
-
-
-class LectureQuestionRequest(BaseModel):
-    youtube_url: str = Field(..., min_length=5)
-    topic: str = Field(default="")
-    question_type: str = Field(default="mcq", description="'mcq' or 'mains'")
-    num_questions: int = Field(default=5, ge=1, le=20)
-    marks: int = Field(default=10)
-    difficulty: str = Field(default="medium")

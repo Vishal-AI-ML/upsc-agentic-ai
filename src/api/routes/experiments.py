@@ -6,11 +6,12 @@ up/down feedback into overall and per-agent win-rates. No A/B prompt experiments
 are configured in this build, so `experiments` is an empty list; the real
 feedback tallies still render.
 """
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from src.api.deps import get_current_user
 from src.api.admin_access import is_admin, require_admin
+from src.api.deps import get_current_user
 from src.core.db import get_db
 from src.core.models import Feedback
 

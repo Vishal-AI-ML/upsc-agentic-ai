@@ -28,6 +28,7 @@ export function Pyq() {
 
   const [bankExists, setBankExists] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [bankStage, setBankStage] = useState("")
   const [bankMsg, setBankMsg] = useState("")
 
   useEffect(() => {
@@ -67,13 +68,14 @@ export function Pyq() {
     setUploading(true)
     setBankMsg("")
     try {
-      const r = await api.pyqBankUpload(file)
+      const r = await api.pyqBankUpload(file, setBankStage)
       setBankExists(true)
       setBankMsg(`Added ${r.filename} — ~${r.approx_questions} questions indexed.`)
     } catch (e) {
       setBankMsg(e instanceof Error ? e.message : "Upload failed.")
     } finally {
       setUploading(false)
+      setBankStage("")
     }
   }
 
@@ -239,6 +241,13 @@ export function Pyq() {
               )}
               {uploading && <Spinner label="Indexing paper…" />}
             </div>
+            {(bankStage === "queued" || bankStage === "running") && (
+              <p className="text-xs text-muted">
+                {bankStage === "queued"
+                  ? "Queued... waiting for a background worker."
+                  : "Indexing in the background..."}
+              </p>
+            )}
             {bankMsg && <p className="text-xs text-muted">{bankMsg}</p>}
             <Button
               onClick={() => void generate("/pyq/bank/generate", false)}

@@ -1,7 +1,8 @@
 """Offline tests for lightweight hybrid retrieval ranking (RRF fusion)."""
+
 from dataclasses import dataclass
 
-from src.core.retrieval import lexical_overlap_score, hybrid_score, rerank_scored_documents
+from src.core.retrieval import hybrid_score, lexical_overlap_score, rerank_scored_documents
 
 
 @dataclass
@@ -10,7 +11,9 @@ class Doc:
 
 
 def test_lexical_overlap_ignores_stopwords():
-    score = lexical_overlap_score("What is curiosity in science?", "Science starts with curiosity and observation.")
+    score = lexical_overlap_score(
+        "What is curiosity in science?", "Science starts with curiosity and observation."
+    )
     assert score > 0.5
 
 

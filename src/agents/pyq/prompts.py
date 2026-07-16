@@ -4,7 +4,6 @@ PYQ Agent Prompts
 
 from langchain_core.prompts import ChatPromptTemplate
 
-
 QUESTION_GEN_PROMPT = ChatPromptTemplate.from_template("""
 You are a UPSC question paper setter creating practice questions.
 
@@ -83,66 +82,6 @@ RULES:
 
 Pasted text:
 {text}
-""")
-
-
-HINT_PROMPT = ChatPromptTemplate.from_template("""
-You are a UPSC mentor giving a strategic hint for this Prelims MCQ.
-
-Question:
-{question}
-
-Options:
-{options}
-
-Give a hint that helps the student THINK, not just tells the answer.
-
-Format:
-Approach: [How to think about this question]
-Key Concept: [The underlying concept being tested]
-Elimination Tip: [Which options can be ruled out and why]
-Remember: [A memory trick or connection]
-
-Do NOT reveal the answer directly. Guide them to find it.
-""")
-
-
-EXPLANATION_PROMPT = ChatPromptTemplate.from_template("""
-Explain this UPSC question comprehensively.
-
-Question:
-{question}
-
-Options:
-{options}
-
-Correct Answer: {answer}
-
-Provide detailed explanation:
-
-Correct Answer: {answer}
-
-Why This is Correct:
-(Detailed explanation with facts)
-
-Why Other Options are Wrong:
-- (a): [Why wrong]
-- (b): [Why wrong]
-- (c): [Why wrong]
-- (d): [Why wrong]
-
-Concept Behind This:
-(The broader topic being tested)
-
-Related Facts for Prelims:
-(3-4 related facts that might be asked)
-
-Source to Read:
-(Name a standard source only if you are confident - e.g. a well-known book or the subject/topic area. Do NOT invent a specific page or chapter number you are unsure of.)
-
-ACCURACY (critical):
-- Base every fact on well-established knowledge. Do NOT fabricate data, dates, or sources.
-- If the provided correct answer seems wrong or you are unsure, say so honestly instead of justifying it with invented facts.
 """)
 
 

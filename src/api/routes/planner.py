@@ -5,8 +5,8 @@ Planner routes - Study plan generation
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.schemas import PlannerRequest, PlannerResponse
 from src.agents.planner.graph import generate_plan, get_plan_meta
+from src.schemas import PlannerRequest, PlannerResponse
 
 router = APIRouter(prefix="/planner", tags=["Planner"])
 
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/planner", tags=["Planner"])
 @router.post("/generate")
 async def generate(request: PlannerRequest):
     """Generate study plan (streaming)."""
+
     def gen():
         for chunk in generate_plan(
             goal=request.goal,
@@ -23,7 +24,7 @@ async def generate(request: PlannerRequest):
             attempt_number=request.attempt_number,
         ):
             yield chunk
-    
+
     return StreamingResponse(gen(), media_type="text/plain")
 
 

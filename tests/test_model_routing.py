@@ -1,4 +1,5 @@
 """Offline tests for the query-complexity model router (pure, no keys/deps)."""
+
 from src.core.model_router import (
     LITE,
     STRONG,

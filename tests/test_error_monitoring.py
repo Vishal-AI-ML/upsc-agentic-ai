@@ -3,6 +3,7 @@
 Fully offline & side-effect-free: sentry_sdk.init is spied (never creates a real
 client), so no events are buffered and the suite never hangs flushing at exit.
 """
+
 from __future__ import annotations
 
 import src.core.error_monitoring as em
