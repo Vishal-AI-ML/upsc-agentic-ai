@@ -7,7 +7,7 @@ def test_ci_workflow_uses_uv_and_pytest():
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "uv sync --frozen" in text
     assert "uv run pytest -q" in text
-    assert "uv run python -m py_compile" in text
+    assert "uv run python -m compileall" in text
 
 
 def test_live_eval_is_gated_and_uploads_report():
