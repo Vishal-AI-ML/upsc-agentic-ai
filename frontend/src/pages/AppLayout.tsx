@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import { lazyWithRetry } from "../lib/lazyWithRetry"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Topbar } from "../components/Topbar"
@@ -10,41 +11,41 @@ import { usePersistentState } from "../lib/usePersistentState"
 // Route-level code splitting: each feature ships as its own lazy chunk, so the
 // initial app bundle stays small and a feature's JS is only fetched the first
 // time it is visited. Layout chrome (Sidebar/Topbar) stays eager.
-const MentorChat = lazy(() =>
+const MentorChat = lazyWithRetry(() =>
   import("../features/mentor/MentorChat").then((m) => ({ default: m.MentorChat })),
 )
-const Dashboard = lazy(() =>
+const Dashboard = lazyWithRetry(() =>
   import("../features/dashboard/Dashboard").then((m) => ({ default: m.Dashboard })),
 )
-const History = lazy(() =>
+const History = lazyWithRetry(() =>
   import("../features/history/History").then((m) => ({ default: m.History })),
 )
-const Evaluator = lazy(() =>
+const Evaluator = lazyWithRetry(() =>
   import("../features/evaluator/Evaluator").then((m) => ({ default: m.Evaluator })),
 )
-const Cost = lazy(() =>
+const Cost = lazyWithRetry(() =>
   import("../features/cost/Cost").then((m) => ({ default: m.Cost })),
 )
-const Experiments = lazy(() => import("../features/experiments/Experiments"))
-const Monitoring = lazy(() =>
+const Experiments = lazyWithRetry(() => import("../features/experiments/Experiments"))
+const Monitoring = lazyWithRetry(() =>
   import("../features/monitoring/Monitoring").then((m) => ({ default: m.Monitoring })),
 )
-const Planner = lazy(() =>
+const Planner = lazyWithRetry(() =>
   import("../features/planner/Planner").then((m) => ({ default: m.Planner })),
 )
-const Pyq = lazy(() => import("../features/pyq/Pyq").then((m) => ({ default: m.Pyq })))
-const Ncert = lazy(() =>
+const Pyq = lazyWithRetry(() => import("../features/pyq/Pyq").then((m) => ({ default: m.Pyq })))
+const Ncert = lazyWithRetry(() =>
   import("../features/ncert/Ncert").then((m) => ({ default: m.Ncert })),
 )
-const CurrentAffairs = lazy(() =>
+const CurrentAffairs = lazyWithRetry(() =>
   import("../features/current_affairs/CurrentAffairs").then((m) => ({
     default: m.CurrentAffairs,
   })),
 )
-const Lecture = lazy(() =>
+const Lecture = lazyWithRetry(() =>
   import("../features/lecture/Lecture").then((m) => ({ default: m.Lecture })),
 )
-const Upload = lazy(() =>
+const Upload = lazyWithRetry(() =>
   import("../features/upload/Upload").then((m) => ({ default: m.Upload })),
 )
 
