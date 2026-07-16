@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     ncert_data_dir: str = "data/ncert"
 
     # Uploads
-    max_upload_mb: int = 20  # is se badi file -> 413 (Too Large)
+    max_upload_mb: int = 50  # is se badi file -> 413 (Too Large). Override via MAX_UPLOAD_MB env.
 
     # Database (multi-user + history). Postgres in prod, SQLite local fallback.
     # e.g. DATABASE_URL=postgresql://user:pass@host/db?sslmode=require

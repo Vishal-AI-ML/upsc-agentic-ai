@@ -21,9 +21,17 @@ export function Upload() {
   const [messages, setMessages] = usePersistentState<Msg[]>("upload:messages", [])
   const [streaming, setStreaming] = useState(false)
 
+  const MAX_UPLOAD_MB = 50
+
   async function upload(file: File) {
     if (file.type && file.type !== "application/pdf") {
       setError("Please choose a PDF file.")
+      return
+    }
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setError(
+        `This PDF is ${(file.size / (1024 * 1024)).toFixed(1)} MB. Maximum allowed size is ${MAX_UPLOAD_MB} MB \u2014 try compressing it or uploading a single chapter.`,
+      )
       return
     }
     setProcessing(true)
@@ -166,7 +174,9 @@ export function Upload() {
             {messages.map((m, i) => (
               <div
                 key={i}
-                className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+                className={
+                  m.role === "user" ? "flex justify-end" : "flex justify-start"
+                }
               >
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 ${

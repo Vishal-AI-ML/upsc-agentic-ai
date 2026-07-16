@@ -36,6 +36,10 @@ services:
       - key: PYTHON_VERSION
         value: "3.13.13"
 
+      # ----- Uploads (max PDF/audio size in MB) -----
+      - key: MAX_UPLOAD_MB
+        value: "50"
+
       # ----- Vector store: Qdrant (managed). No disk required. -----
       - key: QDRANT_URL
         sync: false
