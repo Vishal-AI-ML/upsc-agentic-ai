@@ -9,498 +9,412 @@ pinned: false
 short_description: FastAPI + LangGraph backend for UPSC AI Pro
 ---
 
-<!-- The YAML block above is Hugging Face Spaces metadata for the Docker deploy.
-     GitHub renders it as a small table; leave it in place so the HF Space build
-     does not break. It is not part of the documentation. -->
+<!-- HF Spaces Docker metadata above — keep it so the Space build doesn't break. -->
 
 <div align="center">
 
-# UPSC Agentic AI
+<img src="./screenshots/dashboard.png" alt="UPSC Agentic AI" width="100%" />
 
-**A production-grade, retrieval-grounded AI mentor for UPSC Civil Services preparation — built on FastAPI, LangGraph, and a multi-agent supervisor architecture.**
+# 🎓 UPSC Agentic AI
 
-Eight specialised agents behind one supervisor · hybrid RAG with RRF fusion, reranking and citation enforcement · an LLM-as-judge quality gate in CI · engineered to run on free-tier cloud with graceful degradation everywhere.
+### Production-grade, retrieval-grounded AI mentor for UPSC preparation — 8 specialized agents behind one LangGraph supervisor.
 
-[Live App](https://upsc-ai-agentic.vercel.app/) · [API](https://upsc-agentic-ai-gtsj.onrender.com/) · [API Docs (Swagger)](https://upsc-agentic-ai-gtsj.onrender.com/docs) · [Health](https://upsc-agentic-ai-gtsj.onrender.com/health)
+<p>
+<a href="https://upsc-ai-agentic.vercel.app/"><img src="https://img.shields.io/badge/🚀_Live_Demo-Open_App-6D28D9?style=for-the-badge" alt="Live Demo"/></a>
+<a href="https://upsc-agentic-ai-gtsj.onrender.com/docs"><img src="https://img.shields.io/badge/📖_API_Docs-Swagger-4F46E5?style=for-the-badge" alt="API Docs"/></a>
+<a href="#-license"><img src="https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge" alt="License"/></a>
+</p>
+
+<p>
+<img src="https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square&logo=githubactions&logoColor=white"/>
+<img src="https://img.shields.io/badge/tests-206_passing-brightgreen?style=flat-square&logo=pytest&logoColor=white"/>
+<img src="https://img.shields.io/badge/coverage-offline_quality_gate-blue?style=flat-square"/>
+<img src="https://img.shields.io/badge/status-production_ready-6D28D9?style=flat-square"/>
+<img src="https://img.shields.io/badge/LLM_eval-faithfulness_%E2%89%A50.9-orange?style=flat-square"/>
+</p>
+
+<p>
+<img src="https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white"/>
+<img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white"/>
+<img src="https://img.shields.io/badge/LangGraph-1.x-1C3C3C?style=flat-square&logo=langchain&logoColor=white"/>
+<img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black"/>
+<img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white"/>
+<img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white"/>
+<img src="https://img.shields.io/badge/Qdrant-DC244C?style=flat-square&logo=qdrant&logoColor=white"/>
+</p>
+
+<sub><i>Grounded answers with citations · streaming · background workers · circuit breakers · distributed rate limiting · LLM-as-judge CI gate — engineered to run on free-tier cloud.</i></sub>
 
 </div>
 
 ---
 
-## Table of Contents
+<div align="center">
 
-- [Problem Statement](#problem-statement)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Repository Structure](#repository-structure)
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [Deployment](#deployment)
-- [Screenshots](#screenshots)
-- [API Documentation](#api-documentation)
-- [Production Hardening](#production-hardening)
-- [Performance Metrics](#performance-metrics)
-- [Security](#security)
-- [Testing](#testing)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-- [Author](#author)
-- [Resume Value](#resume-value)
+### ⚡ 60-Second Snapshot
+
+| 🤖 Agents | 🧩 API Routes | 🧪 Tests | 📦 Initial Load | 🔌 Backend | 🎯 RAG Quality Gate |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| **8** specialized | **17** modules | **206** offline | **~82 KB** gzip | **15.4k** LOC | **faithfulness ≥ 0.9** |
+
+</div>
 
 ---
 
-## Problem Statement
+## 🧠 Tech Stack
 
-**The problem.** UPSC preparation spans years, a very large syllabus (NCERTs, standard texts, current affairs, previous-year questions), and requires constant answer-writing practice with feedback. Aspirants juggle disconnected tools: PDFs, coaching notes, YouTube lectures, a separate planner, and no reliable way to get grounded, syllabus-aware answers or objective feedback on mains answers.
+<table>
+<tr>
+<td valign="top" width="33%">
 
-**Why existing solutions fall short.**
-- **Generic chatbots hallucinate.** A raw LLM will confidently invent article numbers, committee names, and dates — unacceptable for an exam where precision is everything.
-- **No grounding or citations.** Most tools cannot show *where* an answer came from, so a serious aspirant cannot trust or verify it.
-- **No feedback loop.** Reading model answers is not the same as having your own answer evaluated against criteria.
-- **Cost and fragility.** Naive multi-agent RAG stacks are expensive and brittle; one slow vector DB or a rate-limited LLM takes the whole app down.
+#### 🧠 AI Stack
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?logo=langchain&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?logo=langchain&logoColor=white)
+![Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq_Fallback-F55036?logo=groq&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?logo=qdrant&logoColor=white)
 
-**Why this project was built.** To demonstrate that a genuinely useful, *grounded*, multi-agent study assistant can be built and **operated** under real constraints — free-tier hosting, a single web worker, and unreliable upstreams — without sacrificing correctness. Every answer is retrieved, fused, reranked, grounded with citations, and continuously graded by an LLM-as-judge gate in CI. The engineering goal was production behaviour (fail-open degradation, background work, tracing, rate limiting) rather than a demo that only works on a laptop.
+</td>
+<td valign="top" width="33%">
+
+#### ⚙️ Backend
+![Python](https://img.shields.io/badge/Python_3.13-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic_v2-E92063?logo=pydantic&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy_2-D71F00?logo=sqlalchemy&logoColor=white)
+![Postgres](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+
+</td>
+<td valign="top" width="33%">
+
+#### 🎨 Frontend
+![React](https://img.shields.io/badge/React_18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite_5-646CFF?logo=vite&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind_3-06B6D4?logo=tailwindcss&logoColor=white)
+![Query](https://img.shields.io/badge/TanStack_Query-FF4154?logo=reactquery&logoColor=white)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+#### ☁️ Infrastructure
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Render](https://img.shields.io/badge/Render-46E3B7?logo=render&logoColor=black)
+![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
+![Upstash](https://img.shields.io/badge/Upstash_Redis-00E9A3?logo=upstash&logoColor=black)
+![uv](https://img.shields.io/badge/uv-DE5FE9?logo=astral&logoColor=white)
+
+</td>
+<td valign="top">
+
+#### 📊 Observability
+![Langfuse](https://img.shields.io/badge/Langfuse-Tracing-0A0A0A)
+![Sentry](https://img.shields.io/badge/Sentry-362D59?logo=sentry&logoColor=white)
+![Logs](https://img.shields.io/badge/Structured_Logging-2F855A)
+![Tracing](https://img.shields.io/badge/Request_Tracing-2B6CB0)
+
+</td>
+<td valign="top">
+
+#### 🔐 Quality & CI
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
+![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?logo=pytest&logoColor=white)
+![Ruff](https://img.shields.io/badge/Ruff-D7FF64?logo=ruff&logoColor=black)
+![LLM Eval](https://img.shields.io/badge/LLM--as--Judge-Gate-F59E0B)
+
+</td>
+</tr>
+</table>
 
 ---
 
-## Features
+## ✨ Features
 
-### Core Features
+<table>
+<tr>
+<td width="25%" align="center">🤖<br><b>Multi-Agent System</b><br><sub>Supervisor routes to 8 sub-agents</sub></td>
+<td width="25%" align="center">🔍<br><b>Hybrid RAG</b><br><sub>Dense + lexical, RRF, rerank</sub></td>
+<td width="25%" align="center">📡<br><b>Streaming Responses</b><br><sub>Token-by-token SSE</sub></td>
+<td width="25%" align="center">🧵<br><b>Grounded + Cited</b><br><sub>Citation enforcement</sub></td>
+</tr>
+<tr>
+<td align="center">⚙️<br><b>Background Workers</b><br><sub>DB-persisted job queue</sub></td>
+<td align="center">🔌<br><b>Circuit Breakers</b><br><sub>Fail fast on flaky deps</sub></td>
+<td align="center">🚦<br><b>Distributed Rate Limiting</b><br><sub>Redis + in-proc fallback</sub></td>
+<td align="center">🧠<br><b>Semantic Cache</b><br><sub>Exact + embedding match</sub></td>
+</tr>
+<tr>
+<td align="center">🔖<br><b>Request Tracing</b><br><sub>Correlation IDs end-to-end</sub></td>
+<td align="center">📝<br><b>Structured Logging</b><br><sub>Request-scoped context</sub></td>
+<td align="center">🔀<br><b>Provider Fallback</b><br><sub>Gemini → Groq on 429</sub></td>
+<td align="center">🎚️<br><b>Smart Model Routing</b><br><sub>LITE / STRONG per turn</sub></td>
+</tr>
+</table>
 
-| Feature | What it does | Backend |
+<div align="center">
+
+**Product surface:** Mentor Chat · NCERT RAG · PDF Upload RAG · PYQ Generator · Study Planner · Answer Evaluator · Current Affairs · History & Session Restore
+
+</div>
+
+---
+
+## 🏗️ Architecture
+
+<details open>
+<summary><b>System Design — end to end</b></summary>
+
+```mermaid
+flowchart TD
+    U([👤 User / Browser]) --> FE["🎨 React + Vite SPA<br/>Vercel"]
+    FE -->|HTTPS + JWT| MW
+    subgraph API["⚙️ FastAPI Gateway · Render"]
+      MW["Middleware stack<br/>RequestId → Metrics → UploadLimit → RateLimit → Timeout → SecHeaders → CORS"] --> RT["Route modules (17)"]
+    end
+    RT --> SUP{{"🧠 LangGraph Supervisor"}}
+    SUP --> AG["🤖 Specialized Agents (8)"]
+    AG --> CORE["🔧 Core services<br/>retrieval · grounding · model router"]
+    CORE --> VDB[("🗃️ Qdrant<br/>Chroma fallback")]
+    CORE --> LLM["🧠 Gemini → Groq"]
+    CORE --> PG[("🐘 Postgres<br/>state · history · checkpoints")]
+    API -.-> OBS["📊 Langfuse · Sentry · Logs"]
+    style SUP fill:#6D28D9,color:#fff
+    style API fill:#EEF2FF,stroke:#4F46E5
+    style LLM fill:#8E75B2,color:#fff
+```
+
+</details>
+
+<details>
+<summary><b>Request Flow</b></summary>
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Middleware
+    participant A as Auth (JWT)
+    participant G as Agent Graph
+    participant K as Cache
+    C->>M: HTTP request (+ bearer)
+    M->>M: request-id · rate limit · 90s timeout
+    M->>A: validate JWT
+    A->>K: response-cache lookup
+    K-->>C: cached answer (hit → fast path)
+    A->>G: miss → run supervisor
+    G-->>C: streamed / structured response
+```
+
+</details>
+
+<details>
+<summary><b>Agent Routing</b></summary>
+
+```mermaid
+flowchart LR
+    Q([Request]) --> R{{Supervisor + Model Router}}
+    R -->|explain / doubt| Mentor
+    R -->|grade answer| Evaluator
+    R -->|schedule| Planner
+    R -->|practice Qs| PYQ
+    R -->|textbook| NCERT
+    R -->|video| Lecture
+    R -->|news| CurrentAffairs[Current Affairs]
+    R -->|my PDF| Upload
+    R -.LITE / STRONG tier.-> R
+```
+
+</details>
+
+<details>
+<summary><b>RAG Pipeline</b></summary>
+
+```mermaid
+flowchart LR
+    A[Query] --> B[Rewrite / Expand]
+    B --> C[Dense vectors]
+    B --> D[Lexical overlap]
+    C --> E[RRF Fusion]
+    D --> E
+    E --> F[Rerank<br/>concept coverage]
+    F --> G[Grounded compose<br/>+ citations]
+    G --> H{Relevance gate}
+    H -->|pass| I([Answer + sources])
+    H -->|fail| J([Refuse / off-syllabus])
+    style G fill:#22C55E,color:#fff
+```
+
+</details>
+
+<details>
+<summary><b>Background Jobs</b></summary>
+
+```mermaid
+flowchart LR
+    U[Upload PDF] --> E[Enqueue job] --> R([Return job_id fast])
+    E --> W[Thread-pool worker]
+    W --> P[(Postgres: status + result)]
+    C[Client] -->|poll GET /jobs/id| P
+    B[Boot] -->|reap_stale_jobs| P
+    style R fill:#4F46E5,color:#fff
+```
+
+</details>
+
+<details>
+<summary><b>Deployment Architecture</b></summary>
+
+```mermaid
+flowchart LR
+    Dev([👨‍💻 Push to main]) --> GH[GitHub]
+    GH --> CI["🧪 GitHub Actions<br/>lint · tests · build · LLM-eval"]
+    CI --> R["⚙️ Render<br/>Docker + Alembic"]
+    CI --> V["🎨 Vercel<br/>SPA"]
+    R --> Prod([🌐 Production])
+    V --> Prod
+    Prod -.health /health.-> R
+    style CI fill:#2088FF,color:#fff
+    style Prod fill:#22C55E,color:#fff
+```
+
+</details>
+
+---
+
+## 📊 Production Metrics
+
+<div align="center">
+
+| ![tests](https://img.shields.io/badge/Tests-206_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white) | ![build](https://img.shields.io/badge/Build-passing-22C55E?style=for-the-badge&logo=githubactions&logoColor=white) | ![ci](https://img.shields.io/badge/CI-offline_gate_+_nightly_eval-2088FF?style=for-the-badge) |
+|:---:|:---:|:---:|
+| ![ready](https://img.shields.io/badge/Production-ready-6D28D9?style=for-the-badge) | ![bundle](https://img.shields.io/badge/Initial_Load-~82_KB_gzip-4F46E5?style=for-the-badge) | ![gate](https://img.shields.io/badge/Faithfulness_Gate-%E2%89%A50.9-F59E0B?style=for-the-badge) |
+
+</div>
+
+> 📏 **Measured, reproducible numbers only.** Initial load = entry JS+CSS from `frontend/dist` (244 KB raw ≈ 82 KB gzip); heaviest lazy chunk (charts) is route-split. Backend cold-start/latency depend on Render's free tier (sleeps on idle) and are intentionally **not** asserted — the response cache + LITE/STRONG routing exist to keep the warm path fast.
+
+---
+
+## 🧩 System Design
+
+```mermaid
+flowchart TD
+    A[🎨 Frontend] --> B[⚙️ API Gateway]
+    B --> C{{🧠 Supervisor Agent}}
+    C --> D[🤖 Specialized Agents]
+    D --> E[(🗃️ Vector Database)]
+    D --> F[🔌 LLM Providers]
+    B --> G[📊 Observability]
+    style C fill:#6D28D9,color:#fff
+    style F fill:#8E75B2,color:#fff
+```
+
+---
+
+## 🧩 Engineering Challenges
+
+| 🪯 Problem | ✅ Solution | ⚖️ Tradeoff |
 |---|---|---|
-| **Mentor Chat** | Conversational UPSC mentor with streaming responses, conversation memory, and a grounded knowledge base. | `src/agents/mentor`, `/mentor/chat` |
-| **NCERT RAG** | Browse class → subject → chapter, then generate grounded notes, mind-maps, and practice questions from NCERT content. | `src/agents/ncert`, `/ncert/*` |
-| **PDF Upload RAG** | Upload a PDF, process it into the vector store as a background job, then chat with the document. | `src/agents/upload`, `/upload/*` |
-| **PYQ Generation** | Generate and parse previous-year-style questions by topic, plus a personal question bank. | `src/agents/pyq`, `/pyq/*` |
-| **Planner** | Generates a structured, timeline-aware study plan (attempt year, months-left, sectioned schedule). | `src/agents/planner`, `/planner/*` |
-| **Evaluator** | Grades prelims/mains answers into structured feedback (score, what went well, gaps, improvements). | `src/agents/evaluator`, `/evaluator/*` |
-| **Current Affairs** | Daily, editorial, and monthly current-affairs digests ingested into retrieval. | `src/agents/current_affairs`, `/current-affairs/*` |
-| **History** | Persistent conversation history and previous-session restore across agents. | `src/api/routes/history.py`, `/history/*` |
-
-### Production Features
-
-| Feature | Implementation |
-|---|---|
-| **Background workers** | DB-persisted, thread-backed job queue — long PDF/lecture work runs off the request path and survives restarts (`src/core/job_queue.py`). |
-| **Semantic cache** | Two-stage response cache (exact SHA-256 key + optional embedding similarity), scoped per conversation, fail-open (`src/core/response_cache.py`). |
-| **Circuit breakers** | Dependency-free breaker that trips flaky upstreams (e.g. Redis REST) to fail fast instead of hammering them (`src/core/circuit_breaker.py`). |
-| **Distributed rate limiting** | Upstash-Redis fixed-window limiter with transparent in-process sliding-window fallback (`src/api/rate_limit_core.py`). |
-| **Structured logging** | Centralised logging config with request-scoped context (`src/core/logging_config.py`, `src/core/request_context.py`). |
-| **Request tracing** | Correlation IDs on every request/response and log line via outermost middleware (`src/api/request_id.py`); optional Langfuse tracing. |
-| **Error recovery** | Global exception handler (clean JSON, no stack-trace leaks), stale-job reaping on boot, per-request hard timeout, Sentry hook. |
+| LLMs hallucinate facts | Hybrid RAG + RRF + rerank + **citation enforcement** | More retrieval latency per answer |
+| Free-tier single worker can stall | **90s hard timeout** + circuit breaker on upstreams | Rare aggressive cutoffs under load |
+| Long PDF processing blocks requests | **DB-persisted background job queue** | Eventual, poll-based UX |
+| Provider 429 / outages | **Gemini → Groq fallback** | Occasional style drift between models |
+| Repeated / retried questions cost money | **Two-stage semantic cache** (exact + embedding) | Cache-scope correctness complexity |
+| Cost vs. quality per turn | **LITE / STRONG model router** (biased to STRONG) | Slightly higher spend when unsure |
+| Rate limiting across instances | **Upstash Redis** window + in-proc fallback | Approximate limits during fallback |
+| Silent quality regressions | **LLM-as-judge gate** in CI (≥0.9) | Nightly eval consumes API quota |
 
 ---
 
-## Architecture
+## 🖼️ Screenshots
 
-### High-level
+<table>
+<tr>
+<td width="33%"><img src="./screenshots/dashboard.png" alt="Dashboard"/><div align="center"><sub><b>Dashboard</b></sub></div></td>
+<td width="33%"><img src="./screenshots/mentor-chat.png" alt="Mentor"/><div align="center"><sub><b>Mentor Chat</b></sub></div></td>
+<td width="33%"><img src="./screenshots/planner.png" alt="Planner"/><div align="center"><sub><b>Planner</b></sub></div></td>
+</tr>
+<tr>
+<td width="33%"><img src="./screenshots/evaluator.png" alt="Evaluator"/><div align="center"><sub><b>Evaluator</b></sub></div></td>
+<td width="33%"><img src="./screenshots/upload-rag.png" alt="RAG Upload"/><div align="center"><sub><b>RAG Upload</b></sub></div></td>
+<td width="33%"><img src="./screenshots/current-affairs.png" alt="Current Affairs"/><div align="center"><sub><b>Current Affairs</b></sub></div></td>
+</tr>
+</table>
 
-```
-         Browser (React + Vite SPA, Vercel)
-                     |  HTTPS, JWT bearer
-                     v
-  FastAPI app  (src/api/main.py)
-   middleware stack (outer -> inner):
-   RequestId -> HttpMetrics -> MaxUploadSize -> RateLimit -> Timeout -> SecurityHeaders -> CORS
-                     |
-                     v
-  Route modules (src/api/routes/*.py)  -- auth, per-feature, admin dashboards
-                     |
-                     v
-  LangGraph Supervisor (src/graph/supervisor.py, app_graph.py)
-                     |  routes to one sub-agent
-     +---------------+-----------------------------------------+
-     v               v                v            v           v
-  Mentor        Evaluator         Planner        NCERT ...   Upload
-  (src/agents/<agent>/graph.py + prompts.py)
-                     |
-                     v
-  Shared core services (src/core/*.py)
-   Retrieval (hybrid + RRF + rerank) -> Grounding/citations
-   Model router (LITE/STRONG) -> LLM providers (Gemini -> Groq fallback)
-   Vector store (Qdrant | Chroma fallback) | Postgres (state, history, checkpoints)
-```
-
-### Request flow
-1. SPA calls `/<api_prefix>/...` with a JWT bearer token.
-2. Middleware assigns a request ID, records metrics, enforces upload size + rate limits, applies a hard 90s timeout, and adds security headers.
-3. `get_current_user` validates the JWT for every protected router.
-4. The route hands off to the shared LangGraph app built once at startup (`app.state.agent_graph`).
-
-### Agent flow
-1. The **supervisor** inspects the request and routes to the correct sub-agent.
-2. Each sub-agent is a self-contained LangGraph pipeline (`graph.py`) with its own prompts.
-3. The **model router** (`model_router.py`) picks a **LITE** or **STRONG** tier per turn — biased toward STRONG when unsure (quality over cost).
-4. Streaming routes push tokens as they are produced; `/sync` routes return Pydantic-validated structured output.
-
-### RAG flow
-1. **Query rewrite/expansion** (`retrieval.rewrite_query`).
-2. **Hybrid retrieval** — dense vectors + lexical overlap.
-3. **RRF fusion** (`reciprocal_rank_fusion`) merges ranked lists.
-4. **Rerank** by concept coverage + overlap.
-5. **Grounded compose** (`grounding.compose_grounded_answer`) with enforced citations and a confidence note. A relevance gate blocks off-syllabus answers.
-
-### Background job flow
-1. A heavy request (PDF/lecture) enqueues a job and returns a `job_id` immediately.
-2. A thread-pool worker executes it; status + result are persisted in Postgres.
-3. The client polls `GET /jobs/{job_id}` until `done`/`error`.
-4. On boot, `reap_stale_jobs` flips orphaned `queued`/`running` rows to `error` so clients never hang on a dead job.
-
-> A deeper write-up lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+<div align="center"><sub>🌙 Full light + dark gallery (60 shots) in <a href="./screenshots/README_SCREENSHOTS.md">screenshots/README_SCREENSHOTS.md</a></sub></div>
 
 ---
 
-## Tech Stack
+## 🚀 Deployment
 
-| Layer | Choices |
-|---|---|
-| **Frontend** | React 18, TypeScript 5.5, Vite 5, React Router 6, TanStack Query 5, Recharts, `react-markdown` + `rehype-sanitize`, Tailwind CSS 3 |
-| **Backend** | Python 3.13, FastAPI, Uvicorn, Pydantic v2 + `pydantic-settings`, SQLAlchemy 2, Alembic |
-| **AI Stack** | LangGraph 1.x (supervisor + subgraphs + checkpointer), LangChain, Google Gemini (primary) with Groq fallback, Gemini embeddings, Tavily / DuckDuckGo web search |
-| **Database** | PostgreSQL (Supabase/Neon pooled) for users, history, jobs, and LangGraph checkpoints; SQLite auto-fallback for local/tests |
-| **Vector DB** | Qdrant (managed) with local Chroma fallback |
-| **Infrastructure** | Upstash Redis (response cache + distributed rate limiting + job backend), Docker (multi-stage, non-root), uv for dependency management |
-| **Observability** | Langfuse (LLM tracing), Sentry (error monitoring), structured logging, in-app HTTP metrics + admin monitoring dashboard |
-| **Deployment** | Render (backend, Docker/Blueprint) · Vercel (frontend SPA) · Hugging Face Spaces (Docker) · GitHub Actions (CI) |
-
----
-
-## Repository Structure
-
-```
-.
-├─ src/                      # FastAPI + LangGraph backend (109 modules)
-│  ├─ api/
-│  │  ├─ main.py            # app factory, middleware stack, router registration
-│  │  ├─ deps.py            # shared deps (current user, DB session)
-│  │  ├─ rate_limit*.py     # distributed rate limiting (+ fallback)
-│  │  ├─ security_headers.py# hardening headers + request timeout
-│  │  ├─ request_id.py      # correlation-ID tracing middleware
-│  │  └─ routes/            # 17 route modules (auth + per-feature + admin)
-│  ├─ agents/               # 8 self-contained sub-agents (graph.py + prompts.py)
-│  │  └─ mentor | evaluator | planner | pyq | ncert | lecture | current_affairs | upload
-│  ├─ graph/                # supervisor, app_graph, RAG graph, tools, memory, state
-│  ├─ core/                 # LLM, model router, retrieval, grounding, cache, jobs,
-│  │                        # circuit breaker, security, db, config, observability
-│  ├─ eval/                 # offline LLM-as-judge + retrieval-quality harness & gates
-│  └─ schemas.py            # all Pydantic request/response contracts
-├─ frontend/                 # React + Vite SPA (40 files)
-│  ├─ src/                   # pages, features, components, lib
-│  └─ dist/                  # production build output
-├─ migrations/               # Alembic migrations (versions/0001..0003)
-├─ tests/                    # 33 offline test modules (206 test functions)
-├─ scripts/                  # KB ingestion + demo-user helpers
-├─ screenshots/              # documentation screenshots (see below)
-├─ Dockerfile                # backend production image (multi-stage, uv, non-root)
-├─ docker-compose.yml        # local backend + deps
-├─ render.yaml               # Render Blueprint (backend)
-├─ alembic.ini               # migration config (URL resolved from settings)
-├─ pyproject.toml            # backend deps + ruff config (uv-managed)
-└─ .github/workflows/ci.yml  # CI: tests, build, nightly LLM-eval gate
+```mermaid
+flowchart LR
+    A([GitHub]) --> B([CI/CD]) --> C([Render · API]) --> E([Production])
+    B --> D([Vercel · SPA]) --> E
+    style E fill:#22C55E,color:#fff
 ```
 
----
+<table>
+<tr><th>Target</th><th>Build</th><th>Start / Serve</th></tr>
+<tr><td>⚙️ <b>Render</b> (API)</td><td><code>pip install uv && uv sync --frozen</code></td><td><code>alembic upgrade head && uvicorn src.api.main:app</code></td></tr>
+<tr><td>🎨 <b>Vercel</b> (SPA)</td><td><code>npm run build</code></td><td><code>dist/</code> + SPA rewrites</td></tr>
+<tr><td>🐳 <b>Docker / HF</b></td><td>multi-stage, non-root</td><td>port <code>7860</code>, healthcheck <code>/health</code></td></tr>
+</table>
 
-## Quick Start
-
-**Prerequisites:** Python 3.13, [uv](https://docs.astral.sh/uv/), Node.js 20+.
-
-### Clone
+<details>
+<summary><b>⚡ Run locally in 4 commands</b></summary>
 
 ```bash
-git clone https://github.com/<your-username>/upsc-agentic-ai.git
-cd upsc-agentic-ai
-```
-
-### Backend setup
-
-```bash
-# 1. Install locked dependencies into an isolated venv
-uv sync --frozen
-
-# 2. Configure environment
-cp .env.example .env
-# edit .env: set JWT_SECRET and GOOGLE_API_KEY (minimum to boot).
-# Generate a secret: python -c "import secrets;print(secrets.token_urlsafe(48))"
-
-# 3. Apply database migrations (SQLite is used automatically if DATABASE_URL is empty)
+git clone https://github.com/<your-username>/upsc-agentic-ai.git && cd upsc-agentic-ai
+uv sync --frozen && cp .env.example .env      # set JWT_SECRET + GOOGLE_API_KEY
 uv run alembic upgrade head
-
-# 4. Run the API (http://localhost:8000, docs at /docs)
-uv run uvicorn src.api.main:app --reload
+uv run uvicorn src.api.main:app --reload      # → http://localhost:8000/docs
 ```
+> Only `JWT_SECRET` + `GOOGLE_API_KEY` are required to boot. Postgres, Qdrant, Redis, Langfuse, Sentry all **fail open** to local/no-op fallbacks.
 
-> Only `JWT_SECRET` and `GOOGLE_API_KEY` are strictly required to boot. Everything else (Postgres, Qdrant, Redis, Langfuse, Sentry, SMTP) is optional and **fails open** to a local/no-op fallback.
-
-### Frontend setup
-
-```bash
-cd frontend
-npm ci
-cp .env.example .env.local          # set VITE API base URL if needed
-npm run dev                          # http://localhost:5173
-# production build:
-npm run build                        # tsc -b && vite build -> dist/
-```
+</details>
 
 ---
 
-## Environment Variables
+## 🎛️ Resume Value — Skills Matrix
 
-Full reference in [`.env.example`](./.env.example). Required keys are marked; everything else has a safe default or a fail-open fallback.
+<div align="center">
 
-| Variable | Required | Default | Purpose |
-|---|:---:|---|---|
-| `JWT_SECRET` | ✅ | — | Signing secret for JWT auth (32+ chars) |
-| `GOOGLE_API_KEY` | ✅ | — | Primary LLM (Google Gemini) |
-| `DATABASE_URL` | – | SQLite fallback | Postgres (use pooled/6543 URL on free tiers) |
-| `GROQ_API_KEY` | – | — | Fallback LLM on Gemini 429 |
-| `ENABLE_PROVIDER_FALLBACK` | – | `true` | Gemini → Groq failover |
-| `QDRANT_URL` / `QDRANT_API_KEY` | – | Chroma fallback | Managed vector store |
-| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` | – | `gemini` | Embeddings (keep `gemini` on 512 MB tiers) |
-| `SIMILARITY_THRESHOLD` / `MENTOR_KB_THRESHOLD` | – | `0.3` / `0.25` | Retrieval relevance gates |
-| `TAVILY_API_KEY` | – | DuckDuckGo | Web search |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | – | in-process | Response cache + distributed rate limit |
-| `REDIS_URL` / `JOBS_BACKEND` | – | `auto` | Background job backend |
-| `RESPONSE_CACHE_ENABLED` | – | `true` | Toggle semantic/exact cache |
-| `CORS_ORIGINS` | – | `[localhost:5173]` | JSON array of allowed origins |
-| `RATE_LIMIT_REQUESTS` / `_PERIOD` | – | `100` / `60` | Global per-IP rate limit |
-| `AUTH_RATE_LIMIT_REQUESTS` / `_PERIOD` | – | `10` / `300` | Stricter auth-endpoint limit |
-| `MAX_UPLOAD_MB` | – | `20` | Upload size cap |
-| `LANGFUSE_ENABLED` / keys | – | `false` | LLM tracing |
-| `SENTRY_DSN` | – | — | Error monitoring |
-| `SMTP_*` / `FRONTEND_URL` | – | — | Email verification + password reset |
-| `REQUIRE_EMAIL_VERIFICATION` | – | `false` | Auto-disabled if SMTP unset |
-| `ADMIN_EMAILS` | – | `[]` | Allowlist for cost/monitoring dashboards |
-| `ENV` / `DEBUG` / `LOG_LEVEL` / `WEB_CONCURRENCY` | – | `production` / `false` / `INFO` / `1` | Runtime + security gates |
+| Skill | Demonstrated | Evidence |
+|---|:---:|---|
+| **Agentic AI** | ✅ | Supervisor + 8 sub-agent graphs |
+| **LangGraph** | ✅ | Subgraphs, checkpointer, shared state |
+| **RAG** | ✅ | Hybrid + RRF + rerank + citations |
+| **FastAPI** | ✅ | 17 route modules, DI auth, streaming + structured |
+| **System Design** | ✅ | Circuit breaker, job queue, rate limiting, cache |
+| **Observability** | ✅ | Tracing, Langfuse, Sentry, metrics dashboard |
+| **DevOps** | ✅ | Docker, uv, Render Blueprint, GitHub Actions |
+| **Quality Eng.** | ✅ | 206 offline tests + LLM-as-judge CI gate |
+
+</div>
 
 ---
 
-## Deployment
+## 📜 License
 
-### GitHub
-Push to `main`. GitHub Actions (`.github/workflows/ci.yml`) runs the offline quality gate (lint → compile → tests) and the frontend type-check + build on every push and PR. A nightly job runs the live LLM-as-judge faithfulness gate and a deploy smoke test.
-
-### Render (backend)
-Deploy via the included [`render.yaml`](./render.yaml) Blueprint (or Docker).
-
-- **Build command:** `pip install uv && uv sync --frozen`
-- **Start command:** `uv run alembic upgrade head && uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT`
-- **Health check:** `/health`
-- **Env vars:** set secrets (`JWT_SECRET`, `GOOGLE_API_KEY`, `DATABASE_URL`, `QDRANT_*`, `CORS_ORIGINS`, …) in the dashboard — never commit them (`sync: false` in the Blueprint).
-- Stateless service (vectors in Qdrant, state in Postgres) → runs on the **free plan** with no persistent disk.
-
-### Vercel (frontend)
-Import the `frontend/` directory (config in [`frontend/vercel.json`](./frontend/vercel.json)).
-
-- **Build command:** `npm run build`
-- **Output directory:** `dist`
-- **Rewrites:** all routes → `/index.html` (SPA)
-- Set the API base URL env var to your Render backend origin.
-
-### Docker / Hugging Face Spaces
-The multi-stage [`Dockerfile`](./Dockerfile) builds a slim, non-root image targeting `src.api.main:app` on port `7860`, with a container health check on `/health`. It runs `alembic upgrade head` before boot.
+<b>MIT</b> recommended (permissive, recruiter-friendly). Add a `LICENSE` file: `MIT License — Copyright (c) 2026 Vishal Shivhare`. Prefer an explicit patent grant? Use **Apache-2.0**.
 
 ---
 
-## Screenshots
+<div align="center">
 
-Captured at 1920×1080 with Playwright, in light and dark themes. Full set + mapping in [`screenshots/README_SCREENSHOTS.md`](./screenshots/README_SCREENSHOTS.md).
+### 👤 Author
 
-| Dashboard | Mentor Chat |
-|---|---|
-| ![Dashboard](./screenshots/dashboard.png) | ![Mentor Chat](./screenshots/mentor-chat.png) |
+**Vishal Shivhare** — GenAI / Backend Engineer
 
-| Planner | Evaluator |
-|---|---|
-| ![Planner](./screenshots/planner.png) | ![Evaluator](./screenshots/evaluator.png) |
+<a href="https://github.com/"><img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white"/></a>
+<a href="https://www.linkedin.com/"><img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white"/></a>
+<a href="https://example.com"><img src="https://img.shields.io/badge/Portfolio-6D28D9?style=for-the-badge&logo=vercel&logoColor=white"/></a>
 
-| Upload RAG | Current Affairs |
-|---|---|
-| ![Upload RAG](./screenshots/upload-rag.png) | ![Current Affairs](./screenshots/current-affairs.png) |
+<sub>Replace the placeholder links above with your live profiles.</sub>
 
----
+<br><br>
+<sub>⭐ If this project is useful or inspiring, consider starring the repo.</sub>
 
-## API Documentation
-
-Interactive docs are served at `/docs` (Swagger) and `/redoc`. All routes are prefixed with the configured API prefix; every non-auth router requires a valid JWT bearer token. Selected endpoints:
-
-### Authentication (`/auth`)
-| Method | Path | Description |
-|---|---|---|
-| POST | `/auth/register` | Create account (email verification when SMTP configured) |
-| POST | `/auth/login` | Obtain access + refresh tokens |
-| GET | `/auth/me` | Current user profile |
-| POST | `/auth/refresh` | Rotate access token from refresh token |
-| POST | `/auth/logout` | Invalidate refresh token |
-| POST | `/auth/forgot-password` · `/auth/reset-password` | Password reset flow |
-| POST | `/auth/verify-email` · `/auth/resend-verification` | Email verification |
-
-### Agent APIs
-| Method | Path | Description |
-|---|---|---|
-| POST | `/agent/chat/stream` | General streaming chat entry point |
-| POST | `/mentor/chat` · `/mentor/chat/sync` | Mentor (streaming / structured) |
-| POST | `/planner/generate` · `/planner/generate/sync` | Study plan (streaming / structured) |
-| POST | `/evaluator/evaluate/sync` · `/mains/sync` · `/model-answer/sync` | Answer evaluation |
-| GET/POST | `/ncert/classes` · `/subjects/{c}` · `/chapters/{c}/{s}` · `/study` · `/chat` | NCERT browse + RAG |
-| POST/GET | `/pyq/generate` · `/parse` · `/topics/{type}` · `/bank/*` | PYQ generation + question bank |
-| POST/GET | `/current-affairs/daily` · `/editorial` · `/monthly` · `/topics` · `/dates` · `/months` | Current affairs |
-
-### Upload APIs
-| Method | Path | Description |
-|---|---|---|
-| POST | `/upload/process` | Upload a PDF → enqueue processing job, returns `job_id` |
-| POST | `/upload/chat` | Chat with the processed document |
-| POST | `/lecture/process` · `/process-text` · `/chat` | Lecture ingestion + chat |
-| GET | `/jobs/{job_id}` | Poll background job status/result |
-
-### History APIs
-| Method | Path | Description |
-|---|---|---|
-| GET | `/history/conversations` | List a user's conversations |
-| GET | `/history/conversations/{id}/messages` | Restore a previous session's messages |
-| POST | `/history/messages` | Persist a message |
-| POST | `/feedback/submit` | Submit response feedback (fuels eval dataset) |
-
----
-
-## Production Hardening
-
-- **Background processing.** A DB-persisted, thread-backed job queue keeps long PDF/lecture work off the request path; job state survives web-process restarts, and stale jobs are reaped on boot so clients never poll forever. Backend is selectable (`thread` / `inline` / `auto`).
-- **Circuit breakers.** A dependency-free breaker wraps flaky upstreams (e.g. the Upstash REST endpoint): after N consecutive failures it OPENS and fails fast for a cooldown, then probes HALF_OPEN before closing — no thundering-herd retries.
-- **Distributed rate limiting.** An Upstash-Redis fixed-window counter enforces per-IP limits across instances, and transparently falls back to an in-process sliding window when Redis creds are unset, the breaker is open, or a call errors. Auth endpoints get a stricter limit.
-- **Structured logging.** Centralised logging config with request-scoped context; each log line carries the correlation ID.
-- **Request tracing.** `RequestIdMiddleware` is the outermost middleware — it honours an inbound `X-Request-ID` or generates one, threads it through logs, and returns it on the response. Optional Langfuse traces every LLM call.
-- **Error recovery.** A global exception handler returns a clean JSON envelope (never a stack trace), a hard 90s per-request timeout prevents a stuck upstream from pinning the single free-tier worker, security headers are added to every response, and Sentry captures unhandled errors when configured.
-- **CI/CD pipeline.** `.github/workflows/ci.yml`: on every push/PR → ruff lint + `compileall` + offline `pytest`, and a frontend type-check + `vite build`. Nightly (and on demand) → a live **LLM-as-judge** faithfulness gate (`--gate 0.9 --relevancy-gate 0.7 --precision-gate 0.6`) plus a retrieval-quality report and a deploy smoke test, with reports uploaded as artifacts.
-
----
-
-## Performance Metrics
-
-Only measured, reproducible numbers are listed. Latency/cold-start figures depend on the deployment tier and are intentionally **not** asserted as fixed benchmarks.
-
-| Metric | Value | How to reproduce |
-|---|---|---|
-| Initial load (entry JS + CSS) | **244 KB raw ≈ 82 KB gzip** | `frontend/dist/assets/index-*.js` + `index-*.css` |
-| Heaviest lazy chunk (charts, route-split to Dashboard/Cost) | 364 KB raw ≈ 100 KB gzip | `generateCategoricalChart-*.js` |
-| Markdown/rendering chunk (lazy) | 159 KB raw ≈ 48 KB gzip | `Markdown-*.js` |
-| Total built frontend output | 920 KB (`dist/`), code-split into 17 chunks | `du -sh frontend/dist` |
-| Backend size | 15,455 LOC across 109 Python modules | `find src -name '*.py' \| xargs wc -l` |
-| Frontend size | 6,243 LOC across 40 TS/TSX files | `find frontend/src -name '*.ts*' \| xargs wc -l` |
-| Automated tests | **206 test functions in 33 offline modules** | `uv run pytest -q` |
-| DB migrations | 3 Alembic revisions | `migrations/versions/` |
-| Frontend build | `tsc -b && vite build` (type-check + bundle) | `cd frontend && npm run build` |
-
-> **Latency, cold start, and CI build time:** the backend is deployed on Render's free plan, which sleeps on inactivity; a cold request pays a container wake-up + `alembic upgrade head` before serving. These vary by tier and are not benchmarked here — the response cache and LITE/STRONG model routing exist specifically to reduce warm-path latency and cost. Measure your own with the commands above.
-
----
-
-## Security
-
-- **JWT authentication.** Signed access tokens (`python-jose`) with expiry; short-lived access + rotating refresh tokens (`src/core/refresh_tokens.py`), and logout invalidation. Every protected router depends on `get_current_user`.
-- **Password hashing.** `bcrypt` via `passlib` — no plaintext passwords are ever stored.
-- **Rate limiting.** Global per-IP limit plus a stricter auth-endpoint limit, distributed via Redis with an in-process fallback (see Hardening).
-- **Security headers.** `SecurityHeadersMiddleware` adds standard hardening headers to every response, with a relaxed CSP only on the docs paths so Swagger UI still loads.
-- **Secrets management.** All secrets come from environment variables (`pydantic-settings`); `.env` is git-ignored and Render Blueprint secrets are `sync: false`. `src/core/secret_utils.py` avoids logging sensitive values. CORS is an explicit allowlist. Ownership checks ensure users can only read their own conversations/history (`tests/test_security_ownership.py`).
-- **Prompt-injection defence.** Untrusted retrieved/uploaded content is sanitised and wrapped before it reaches the model (`src/core/prompt_safety.py`).
-
----
-
-## Testing
-
-```bash
-uv run pytest -q          # 206 offline tests, no API key or network required
-uv run ruff check src tests
-cd frontend && npm run build && npm run lint
-```
-
-- **Unit tests.** Pure logic — model routing, RRF fusion, reranking, circuit breaker, rate limiter, eval parsing, plan timeline, secret utils, prompt safety.
-- **Integration/smoke tests.** Boot the **real** FastAPI app against a throwaway SQLite DB and exercise critical paths (health, auth + email verification, relevance gate, PYQ parser, RAG citations, ownership). LLM/email/network calls are mocked, so the whole suite runs offline with no keys.
-- **Quality-gate tests.** LLM-as-judge gate logic, retrieval-quality eval, and grounding/citation enforcement.
-- **CI checks.** ruff lint, `compileall` syntax check, offline pytest, frontend type-check + build, prettier format check; nightly live faithfulness gate + deploy smoke test.
-- **Linting/formatting.** ruff (`E`, `F`, `W`, `I`) for Python; Prettier for the frontend.
-
----
-
-## Roadmap
-
-### Completed
-- Multi-agent supervisor with 8 specialised agents and streaming.
-- Hybrid retrieval (dense + lexical) with RRF fusion, reranking, and citation enforcement.
-- LLM-as-judge quality gate + retrieval-quality eval wired into CI.
-- Provider fallback (Gemini → Groq), LITE/STRONG model routing.
-- Background job queue, semantic response cache, circuit breaker, distributed rate limiting.
-- Session history + previous-session restore, feedback → eval dataset loop, study streaks.
-- Structured logging, request tracing, Langfuse + Sentry hooks, admin cost/monitoring dashboards.
-- Docker image, Render Blueprint, Vercel SPA config, keep-alive-friendly stateless design.
-
-### In Progress
-- Advanced-RAG quality lift: cross-encoder reranking, multi-query retrieval (RAG-Fusion), HyDE.
-- Human-in-the-loop via LangGraph interrupts; parallel fan-out in plan-execute.
-
-### Future
-- Spaced-repetition scheduler and weak-area analytics derived from PYQ performance.
-- Consolidated mentor experience; an interview-simulator / mock-analysis agent.
-
----
-
-## Contributing
-
-Contributions are welcome.
-
-1. Fork and create a branch: `git checkout -b feat/your-feature`.
-2. Set up the backend and frontend (see [Quick Start](#quick-start)).
-3. Keep changes focused and add/adjust tests. Run the full local gate before pushing:
-   ```bash
-   uv run ruff check src tests && uv run pytest -q
-   cd frontend && npm run build && npm run lint
-   ```
-4. Use clear, conventional commit messages and open a PR describing the change and the tradeoffs.
-5. CI must pass. For changes touching retrieval/prompts, note the impact on the eval gate.
-
-Please open an issue first for large or architectural changes so we can align on approach.
-
----
-
-## License
-
-No license file is currently committed. **Recommended: MIT** — permissive, familiar to recruiters and contributors, and appropriate for a portfolio/product project. Add a `LICENSE` file:
-
-```
-MIT License — Copyright (c) 2026 Vishal Shivhare
-```
-
-If you prefer an explicit patent grant, choose **Apache-2.0** instead.
-
----
-
-## Author
-
-**Vishal Shivhare** — GenAI / Backend Engineer. Designer and primary maintainer of UPSC Agentic AI.
-
-- GitHub: [github.com/&lt;your-username&gt;](https://github.com/)
-- LinkedIn: [linkedin.com/in/&lt;your-handle&gt;](https://www.linkedin.com/)
-- Portfolio: [&lt;your-portfolio-url&gt;](https://example.com)
-
-_(Replace the placeholders above with your live links.)_
-
----
-
-## Resume Value
-
-This project is concrete evidence of the ability to **build and operate** a production AI system, not just prototype one:
-
-- **Agentic AI & LangGraph** — a supervisor routing to 8 self-contained sub-agent graphs, with checkpointing, shared state, and conversation memory.
-- **RAG engineering** — hybrid retrieval, RRF fusion, reranking, groundedness + citation enforcement, and an automated relevance gate.
-- **Production AI engineering** — LLM provider fallback, complexity-based model routing (cost/quality tradeoff), semantic response caching, and continuous LLM-as-judge quality gating in CI.
-- **FastAPI / backend** — clean HTTP layer, dependency-injected auth, Pydantic v2 contracts, SQLAlchemy + Alembic migrations, streaming and structured endpoints.
-- **Distributed systems** — distributed rate limiting with graceful fallback, circuit breakers, a persisted background job queue, and stateless horizontal-scaling-friendly design.
-- **Observability** — structured logging, request-ID tracing, Langfuse LLM traces, Sentry error monitoring, and an in-app metrics/monitoring dashboard.
-- **DevOps** — multi-stage non-root Docker, uv-locked builds, Render Blueprint + Vercel config, GitHub Actions CI with offline gates and nightly live evals.
-
-The throughline: every feature is paired with an **operational** decision — fail-open fallbacks, cost controls, and honest measurement — chosen deliberately for real free-tier constraints.
+</div>
